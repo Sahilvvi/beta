@@ -16,7 +16,8 @@ import {
 import { useAuthStore } from '@/stores/authStore';
 import { PHASE1_PLAN, money, pence } from '@/lib/billing';
 import { isActiveSubscription, useSubscription } from '@/hooks/useProfile';
-import { searchProductsForPrompt, productShopUrl, MAX_PRODUCTS_PER_GENERATION, type Product } from '@/lib/products';
+import { searchProductsForPrompt, MAX_PRODUCTS_PER_GENERATION, type Product } from '@/lib/products';
+import { BudgetFilter, MoreLikeThis, ProductTile } from '@/components/app/ProductPicker';
 
 /** How long to wait after the last stroke before asking Gemini what's under the mask. */
 const LABEL_DEBOUNCE_MS = 700;
@@ -99,15 +100,19 @@ export function MaskEditFlow({
   const labelTimer = useRef<number | null>(null);
   const promptSearchId = useRef(0);
 
-  const toggleProduct = (id: string) => {
-    setSelectedProductIds((prev) => {
-      if (prev.includes(id)) return prev.filter((p) => p !== id);
-      if (prev.length >= MAX_PRODUCTS_PER_GENERATION) {
-        toast.error(`Up to ${MAX_PRODUCTS_PER_GENERATION} products per design for now.`);
-        return prev;
-      }
-      return [...prev, id];
-    });
+  const [lastPicked, setLastPicked] = useState<Product | null>(null);
+  const toggleProduct = (product: Product) => {
+    if (selectedProductIds.includes(product.id)) {
+      setSelectedProductIds((prev) => prev.filter((p) => p !== product.id));
+      if (lastPicked?.id === product.id) setLastPicked(null);
+      return;
+    }
+    if (selectedProductIds.length >= MAX_PRODUCTS_PER_GENERATION) {
+      toast.error(`Up to ${MAX_PRODUCTS_PER_GENERATION} products per design for now.`);
+      return;
+    }
+    setSelectedProductIds((prev) => [...prev, product.id]);
+    setLastPicked(product);
   };
 
   const voice = useVoiceInput({
@@ -422,25 +427,7 @@ export function MaskEditFlow({
                             {usingDetectedLabel ? `Matching what you painted (${label})` : 'Matching your prompt'}
                             <small>optional · up to {MAX_PRODUCTS_PER_GENERATION}</small>
                           </p>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                            <span className="muted" style={{ fontSize: 12 }}>Budget</span>
-                            <input
-                              type="number" min={0} inputMode="numeric" placeholder="Min"
-                              value={budgetMin} onChange={(e) => setBudgetMin(e.target.value)}
-                              className="field" style={{ height: 30, width: 72, paddingInline: 8, fontSize: 12.5 }}
-                            />
-                            <span className="muted" style={{ fontSize: 12 }}>–</span>
-                            <input
-                              type="number" min={0} inputMode="numeric" placeholder="Max"
-                              value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)}
-                              className="field" style={{ height: 30, width: 72, paddingInline: 8, fontSize: 12.5 }}
-                            />
-                            {(budgetMin || budgetMax) && (
-                              <button type="button" className="ico-btn" title="Clear budget" onClick={() => { setBudgetMin(''); setBudgetMax(''); }}>
-                                <X width={12} height={12} />
-                              </button>
-                            )}
-                          </div>
+                          <div style={{ marginTop: 6 }}><BudgetFilter min={budgetMin} max={budgetMax} onChange={(a, b) => { setBudgetMin(a); setBudgetMax(b); }} /></div>
                           {searchingProducts && promptProducts.length === 0 && (
                             <p className="muted" style={{ fontSize: 12 }}>Looking for real products…</p>
                           )}
@@ -450,45 +437,9 @@ export function MaskEditFlow({
                             </p>
                           )}
                           <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))', gap: 8 }}>
-                            {(showAllProducts ? promptProducts : promptProducts.slice(0, INITIAL_VISIBLE_PRODUCTS)).map((p) => {
-                              const on = selectedProductIds.includes(p.id);
-                              return (
-                                <div
-                                  key={p.id}
-                                  role="button"
-                                  tabIndex={0}
-                                  title={p.name}
-                                  onClick={() => toggleProduct(p.id)}
-                                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleProduct(p.id); } }}
-                                  style={{
-                                    position: 'relative', aspectRatio: '1', borderRadius: 12, overflow: 'hidden', padding: 0, cursor: 'pointer',
-                                    boxShadow: on ? '0 0 0 2px var(--brass)' : 'inset 0 0 0 1px var(--stone-2)',
-                                  }}
-                                >
-                                  <img src={p.display_image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                  {on && (
-                                    <span style={{ position: 'absolute', top: 4, right: 4, background: 'var(--brass)', borderRadius: 999, width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                      <Check width={11} height={11} color="#fff" />
-                                    </span>
-                                  )}
-                                  {p.source_url && (
-                                    <a
-                                      href={productShopUrl(p.id)}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title={`Visit ${p.name}`}
-                                      onClick={(e) => e.stopPropagation()}
-                                      style={{
-                                        position: 'absolute', bottom: 4, left: 4, background: 'rgba(0,0,0,.55)', borderRadius: 999,
-                                        width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                      }}
-                                    >
-                                      <ExternalLink width={10} height={10} color="#fff" />
-                                    </a>
-                                  )}
-                                </div>
-                              );
-                            })}
+                            {(showAllProducts ? promptProducts : promptProducts.slice(0, INITIAL_VISIBLE_PRODUCTS)).map((p) => (
+                              <ProductTile key={p.id} product={p} selected={selectedProductIds.includes(p.id)} onToggle={() => toggleProduct(p)} />
+                            ))}
                           </div>
                           {promptProducts.length > INITIAL_VISIBLE_PRODUCTS && (
                             <button
@@ -505,6 +456,7 @@ export function MaskEditFlow({
                               {selectedProductIds.length} selected — this exact product will appear in the result.
                             </p>
                           )}
+                          {lastPicked && <MoreLikeThis product={lastPicked} selectedIds={selectedProductIds} onToggle={toggleProduct} />}
                         </div>
                       )}
                     </div>

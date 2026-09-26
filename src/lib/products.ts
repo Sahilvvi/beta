@@ -74,6 +74,74 @@ export function useProducts(roomType?: RoomType, category?: ProductCategory, bud
   });
 }
 
+/** Quick budget presets, shown as chips above the min/max fields. Catalog
+ *  prices are mostly USD, so the bands are labelled in dollars. */
+export const PRICE_BANDS: { label: string; min?: number; max?: number }[] = [
+  { label: 'Under $100', max: 100 },
+  { label: '$100–300', min: 100, max: 300 },
+  { label: '$300–800', min: 300, max: 800 },
+  { label: '$800+', min: 800 },
+];
+
+/** Alternatives to a chosen product: same category, similar price (±50%),
+ *  cheapest first so the list reads as "a bit less / a bit more". */
+export function useSimilarProducts(product?: Pick<Product, 'id' | 'category' | 'price'> | null) {
+  return useQuery({
+    queryKey: ['similar-products', product?.id],
+    enabled: !!product,
+    queryFn: async () => {
+      let query = db
+        .from('products')
+        .select('id, name, category, brand, price, currency, display_image_url, room_types, source_url')
+        .eq('active', true)
+        .eq('category', product!.category)
+        .neq('id', product!.id)
+        .order('price', { ascending: true })
+        .limit(8);
+      if (product!.price != null) {
+        query = query.gte('price', product!.price * 0.5).lte('price', product!.price * 1.5);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data ?? []) as Product[];
+    },
+  });
+}
+
+export interface SavedProduct extends Product {
+  saved_at: string;
+}
+
+/** The signed-in user's hearted products ("My picks"), newest first. */
+export function useSavedProducts(enabled = true) {
+  return useQuery({
+    queryKey: ['saved-products'],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await db
+        .from('saved_products')
+        .select('created_at, products(id, name, category, brand, price, currency, display_image_url, room_types, source_url)')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? [])
+        .filter((r) => r.products)
+        .map((r) => ({ ...(r.products as unknown as Product), saved_at: r.created_at as string })) as SavedProduct[];
+    },
+  });
+}
+
+export async function setProductSaved(productId: string, saved: boolean) {
+  if (saved) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Please sign in to save products.');
+    const { error } = await db.from('saved_products').upsert({ user_id: user.id, product_id: productId }, { onConflict: 'user_id,product_id', ignoreDuplicates: true });
+    if (error) throw error;
+  } else {
+    const { error } = await db.from('saved_products').delete().eq('product_id', productId);
+    if (error) throw error;
+  }
+}
+
 export interface GenerationProductHotspot {
   id: string;
   x: number;

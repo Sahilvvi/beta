@@ -13,14 +13,33 @@
 // product pays for the live lookup (~1-2s), every click after that for
 // anyone, until the cache goes stale, redirects immediately.
 //
+// Affiliate wrapping (Sovrn Commerce, pending approval): every redirect
+// destination this function computes passes through wrapAffiliate() before
+// the 302. Today that's a no-op — SOVRN_ENABLED isn't set, so it returns the
+// URL untouched. Once the account is approved, set SOVRN_ENABLED=true and
+// SOVRN_REDIRECT_BASE (Sovrn's own redirect-prefix URL, destination
+// URL-encoded and appended) as secrets — no code change needed to turn it on.
+//
 // Deploy:  supabase functions deploy product-link --no-verify-jwt
 // Secrets: RAPIDAPI_KEY, plus the SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
-//          every project already has.
+//          every project already has. SOVRN_ENABLED / SOVRN_REDIRECT_BASE
+//          once Sovrn approves the account.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const CURRENCY_TO_COUNTRY: Record<string, string> = { USD: "us", GBP: "gb", CAD: "ca", AUD: "au" };
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+const SOVRN_ENABLED = (Deno.env.get("SOVRN_ENABLED") ?? "").toLowerCase() === "true";
+const SOVRN_REDIRECT_BASE = Deno.env.get("SOVRN_REDIRECT_BASE");
+
+/** Routes a resolved destination through Sovrn's affiliate redirect when the
+ *  account is live; otherwise returns it unchanged. Centralising this one
+ *  call site means enabling Sovrn later is a secrets change, not a redeploy. */
+function wrapAffiliate(destUrl: string): string {
+  if (!SOVRN_ENABLED || !SOVRN_REDIRECT_BASE) return destUrl;
+  return SOVRN_REDIRECT_BASE + encodeURIComponent(destUrl);
+}
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -48,12 +67,12 @@ Deno.serve(async (req) => {
 
   const fallback = () =>
     product.source_url
-      ? Response.redirect(product.source_url, 302)
+      ? Response.redirect(wrapAffiliate(product.source_url), 302)
       : new Response("This product has no listing link.", { status: 404 });
 
   const cacheAge = product.resolved_shop_url_at ? Date.now() - new Date(product.resolved_shop_url_at).getTime() : Infinity;
   if (product.resolved_shop_url && cacheAge < CACHE_TTL_MS) {
-    return Response.redirect(product.resolved_shop_url, 302);
+    return Response.redirect(wrapAffiliate(product.resolved_shop_url), 302);
   }
 
   const rapidApiKey = Deno.env.get("RAPIDAPI_KEY");
@@ -86,7 +105,7 @@ Deno.serve(async (req) => {
       .eq("id", id);
     if (cacheErr) console.error("product-link: couldn't cache resolved URL", cacheErr);
 
-    return Response.redirect(offerUrl, 302);
+    return Response.redirect(wrapAffiliate(offerUrl), 302);
   } catch {
     return fallback();
   }

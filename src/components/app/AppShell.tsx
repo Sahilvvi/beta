@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, LayoutGrid, Wand2, Plus, LogOut,
-  Settings as SettingsIcon, Eraser, Replace as ReplaceIcon, Search, FolderOpen, Zap, Menu, X, CornerDownLeft,
+  Settings as SettingsIcon, Eraser, Replace as ReplaceIcon, Search, FolderOpen, Heart, Zap, Menu, X, CornerDownLeft,
 } from 'lucide-react';
 import '@/styles/app-theme.css';
 import { useAuthStore } from '@/stores/authStore';
@@ -18,6 +18,7 @@ const CRUMB: Record<string, [string, string]> = {
   '/app': ['Studio', 'Overview'],
   '/app/templates': ['Studio', 'Templates'],
   '/app/library': ['Studio', 'Projects'],
+  '/app/saved': ['Studio', 'My picks'],
   '/app/create': ['Tools', 'Create'],
   '/app/cleanup': ['Tools', 'Cleanup'],
   '/app/replace': ['Tools', 'Replace'],
@@ -29,6 +30,7 @@ const PAGES = [
   { label: 'New design', sub: 'Upload a room and restyle it', to: '/app/create' },
   { label: 'Templates', sub: 'Browse every style', to: '/app/templates' },
   { label: 'Projects', sub: 'Everything you have made', to: '/app/library' },
+  { label: 'My picks', sub: 'Real products you have saved', to: '/app/saved' },
   { label: 'Cleanup', sub: 'Erase something from a photo', to: '/app/cleanup' },
   { label: 'Replace', sub: 'Swap one object for another', to: '/app/replace' },
   { label: 'Settings', sub: 'Profile, password and plan', to: '/app/settings' },
@@ -156,6 +158,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             </NavLink>
             <NavLink to="/app/library" className={({ isActive }) => (isActive ? 'on' : '')}>
               <FolderOpen width={18} height={18} />Projects<span className="n">{designs?.length ?? 0}</span>
+            </NavLink>
+            <NavLink to="/app/saved" className={({ isActive }) => (isActive ? 'on' : '')}>
+              <Heart width={18} height={18} />My picks
             </NavLink>
           </nav>
 

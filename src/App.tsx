@@ -41,6 +41,7 @@ const Signup = lazyPage(() => import("./pages/Signup"));
 const Overview = lazyPage(() => import("./pages/app/Overview"));
 const Templates = lazyPage(() => import("./pages/app/Templates"));
 const Library = lazyPage(() => import("./pages/app/Library"));
+const Saved = lazyPage(() => import("./pages/app/Saved"));
 const Create = lazyPage(() => import("./pages/app/Create"));
 const Cleanup = lazyPage(() => import("./pages/app/Cleanup"));
 const Replace = lazyPage(() => import("./pages/app/Replace"));
@@ -156,6 +157,7 @@ function AppRoutes() {
         <Route path="/app" element={<ProtectedRoute><AppShell><Overview /></AppShell></ProtectedRoute>} />
         <Route path="/app/templates" element={<ProtectedRoute><AppShell><Templates /></AppShell></ProtectedRoute>} />
         <Route path="/app/library" element={<ProtectedRoute><AppShell><Library /></AppShell></ProtectedRoute>} />
+        <Route path="/app/saved" element={<ProtectedRoute><AppShell><Saved /></AppShell></ProtectedRoute>} />
         <Route path="/app/create" element={<ProtectedRoute><AppShell><Create /></AppShell></ProtectedRoute>} />
         <Route path="/app/cleanup" element={<ProtectedRoute><AppShell><Cleanup /></AppShell></ProtectedRoute>} />
         <Route path="/app/replace" element={<ProtectedRoute><AppShell><Replace /></AppShell></ProtectedRoute>} />

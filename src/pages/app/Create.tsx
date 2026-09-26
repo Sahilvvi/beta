@@ -20,7 +20,8 @@ import {
 import {
   DEFAULT_TEMPLATE_KEY, ROOM_TYPES, TEMPLATES, type RoomType, roomLabel, templateByKey,
 } from '@/lib/templates';
-import { useProducts, searchProductsForPrompt, productShopUrl, MAX_PRODUCTS_PER_GENERATION, type Product } from '@/lib/products';
+import { useProducts, searchProductsForPrompt, MAX_PRODUCTS_PER_GENERATION, type Product } from '@/lib/products';
+import { BudgetFilter, MoreLikeThis, ProductTile } from '@/components/app/ProductPicker';
 
 /** How long to wait after the last keystroke before searching for real products matching the prompt. */
 const PROMPT_PRODUCT_DEBOUNCE_MS = 700;
@@ -169,15 +170,19 @@ export default function Create() {
   // and beds; that looked like "detection is right but products are wrong."
   const productChoices = hasActiveQuery ? promptProducts : (catalogProducts ?? []);
 
-  const toggleProduct = (id: string) => {
-    setSelectedProductIds((prev) => {
-      if (prev.includes(id)) return prev.filter((p) => p !== id);
-      if (prev.length >= MAX_PRODUCTS_PER_GENERATION) {
-        toast.error(`Up to ${MAX_PRODUCTS_PER_GENERATION} products per design for now.`);
-        return prev;
-      }
-      return [...prev, id];
-    });
+  const [lastPicked, setLastPicked] = useState<Product | null>(null);
+  const toggleProduct = (product: Product) => {
+    if (selectedProductIds.includes(product.id)) {
+      setSelectedProductIds((prev) => prev.filter((p) => p !== product.id));
+      if (lastPicked?.id === product.id) setLastPicked(null);
+      return;
+    }
+    if (selectedProductIds.length >= MAX_PRODUCTS_PER_GENERATION) {
+      toast.error(`Up to ${MAX_PRODUCTS_PER_GENERATION} products per design for now.`);
+      return;
+    }
+    setSelectedProductIds((prev) => [...prev, product.id]);
+    setLastPicked(product);
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -516,25 +521,7 @@ export default function Create() {
                   {usingMarkedLabel ? `Matching what you marked (${markedLabel})` : hasActiveQuery ? 'Matching your prompt' : 'Real products'}
                   <small>optional · up to {MAX_PRODUCTS_PER_GENERATION}</small>
                 </h5>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-                  <span className="muted" style={{ fontSize: 12 }}>Budget</span>
-                  <input
-                    type="number" min={0} inputMode="numeric" placeholder="Min"
-                    value={budgetMin} onChange={(e) => setBudgetMin(e.target.value)}
-                    className="field" style={{ height: 30, width: 72, paddingInline: 8, fontSize: 12.5 }}
-                  />
-                  <span className="muted" style={{ fontSize: 12 }}>–</span>
-                  <input
-                    type="number" min={0} inputMode="numeric" placeholder="Max"
-                    value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)}
-                    className="field" style={{ height: 30, width: 72, paddingInline: 8, fontSize: 12.5 }}
-                  />
-                  {(budgetMin || budgetMax) && (
-                    <button type="button" className="ico-btn" title="Clear budget" onClick={() => { setBudgetMin(''); setBudgetMax(''); }}>
-                      <X width={12} height={12} />
-                    </button>
-                  )}
-                </div>
+                <BudgetFilter min={budgetMin} max={budgetMax} onChange={(a, b) => { setBudgetMin(a); setBudgetMax(b); }} />
                 {searchingProducts && productChoices.length === 0 && (
                   <p className="muted" style={{ fontSize: 12 }}>Looking for real products…</p>
                 )}
@@ -547,45 +534,9 @@ export default function Create() {
                   <p className="muted" style={{ fontSize: 12 }}>Nothing in that budget — try widening it.</p>
                 )}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))', gap: 8 }}>
-                  {(showAllProducts ? productChoices : productChoices.slice(0, INITIAL_VISIBLE_PRODUCTS)).map((p) => {
-                    const on = selectedProductIds.includes(p.id);
-                    return (
-                      <div
-                        key={p.id}
-                        role="button"
-                        tabIndex={0}
-                        title={p.name}
-                        onClick={() => toggleProduct(p.id)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleProduct(p.id); } }}
-                        style={{
-                          position: 'relative', aspectRatio: '1', borderRadius: 12, overflow: 'hidden', padding: 0, cursor: 'pointer',
-                          boxShadow: on ? '0 0 0 2px var(--brass)' : 'inset 0 0 0 1px var(--stone-2)',
-                        }}
-                      >
-                        <img src={p.display_image_url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        {on && (
-                          <span style={{ position: 'absolute', top: 4, right: 4, background: 'var(--brass)', borderRadius: 999, width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Check width={11} height={11} color="#fff" />
-                          </span>
-                        )}
-                        {p.source_url && (
-                          <a
-                            href={productShopUrl(p.id)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title={`Visit ${p.name}`}
-                            onClick={(e) => e.stopPropagation()}
-                            style={{
-                              position: 'absolute', bottom: 4, left: 4, background: 'rgba(0,0,0,.55)', borderRadius: 999,
-                              width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}
-                          >
-                            <ExternalLink width={10} height={10} color="#fff" />
-                          </a>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {(showAllProducts ? productChoices : productChoices.slice(0, INITIAL_VISIBLE_PRODUCTS)).map((p) => (
+                    <ProductTile key={p.id} product={p} selected={selectedProductIds.includes(p.id)} onToggle={() => toggleProduct(p)} />
+                  ))}
                 </div>
                 {productChoices.length > INITIAL_VISIBLE_PRODUCTS && (
                   <button
@@ -601,6 +552,13 @@ export default function Create() {
                   <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
                     {selectedProductIds.length} selected — these exact products will appear in the design.
                   </p>
+                )}
+                {lastPicked && (
+                  <MoreLikeThis
+                    product={lastPicked}
+                    selectedIds={selectedProductIds}
+                    onToggle={toggleProduct}
+                  />
                 )}
               </div>
             )}
