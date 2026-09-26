@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Download, RefreshCw, Trash2 } from 'lucide-react';
+import { Check, Columns3, Download, RefreshCw, Trash2, X } from 'lucide-react';
 
 import { SEO } from '@/components/shared/SEO';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -34,6 +34,23 @@ export default function Library() {
 
   const [viewing, setViewing] = useState<Generation | null>(null);
   const [confirming, setConfirming] = useState<Generation | null>(null);
+  const [comparing, setComparing] = useState(false);
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [showCompare, setShowCompare] = useState(false);
+  const MAX_COMPARE = 4;
+
+  const toggleCompare = (id: string) => {
+    setCompareIds((prev) => {
+      if (prev.includes(id)) return prev.filter((c) => c !== id);
+      if (prev.length >= MAX_COMPARE) {
+        toast.error(`Compare up to ${MAX_COMPARE} designs at once.`);
+        return prev;
+      }
+      return [...prev, id];
+    });
+  };
+  const exitCompareMode = () => { setComparing(false); setCompareIds([]); };
+  const compareSet = generations?.filter((g) => compareIds.includes(g.id)) ?? [];
 
   const query = (searchParams.get('q') ?? '').trim().toLowerCase();
   const visible = query
@@ -98,6 +115,17 @@ export default function Library() {
             </p>
           </div>
           <div className="actions r" style={{ ['--i' as string]: 1 }}>
+            {generations && generations.length > 1 && (
+              comparing ? (
+                <button type="button" className="btn btn-line" onClick={exitCompareMode}>
+                  <X width={15} height={15} /> Cancel
+                </button>
+              ) : (
+                <button type="button" className="btn btn-line" onClick={() => setComparing(true)}>
+                  <Columns3 width={15} height={15} /> Compare
+                </button>
+              )
+            )}
             <Link className="btn btn-dark" to="/app/create">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
               New design
@@ -149,27 +177,97 @@ export default function Library() {
           </div>
         ) : (
           <div className="dgrid">
-            {visible.map((g, i) => (
-              <div key={g.id} className="dcard r" style={{ ['--i' as string]: i }}>
-                <button type="button" onClick={() => setViewing(g)} className="pic" style={{ width: '100%', display: 'block' }} aria-label={`Open ${titleFor(g)}`}>
-                  <StoredImage src={g.output_image_url ?? g.input_image_url} alt={titleFor(g)} />
-                </button>
-                <div className="bd" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <h4>{titleFor(g)}</h4>
-                    <div className="m">{formatDate(g.created_at)}</div>
+            {visible.map((g, i) => {
+              const selected = compareIds.includes(g.id);
+              return (
+                <div key={g.id} className="dcard r" style={{ ['--i' as string]: i }}>
+                  <button
+                    type="button"
+                    onClick={() => (comparing ? toggleCompare(g.id) : setViewing(g))}
+                    className="pic"
+                    style={{ width: '100%', display: 'block', position: 'relative' }}
+                    aria-label={comparing ? `${selected ? 'Remove' : 'Add'} ${titleFor(g)} ${selected ? 'from' : 'to'} compare` : `Open ${titleFor(g)}`}
+                  >
+                    <StoredImage src={g.output_image_url ?? g.input_image_url} alt={titleFor(g)} />
+                    {comparing && (
+                      <span
+                        style={{
+                          position: 'absolute', top: 10, right: 10, width: 26, height: 26, borderRadius: 999,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: selected ? 'var(--brass)' : 'rgba(0,0,0,.45)',
+                          boxShadow: selected ? 'none' : 'inset 0 0 0 1.5px rgba(255,255,255,.8)',
+                        }}
+                      >
+                        {selected && <Check width={15} height={15} color="#fff" />}
+                      </span>
+                    )}
+                  </button>
+                  <div className="bd" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <h4>{titleFor(g)}</h4>
+                      <div className="m">{formatDate(g.created_at)}</div>
+                    </div>
+                    {!comparing && (
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        <button type="button" className="ico-btn" title="Download" aria-label="Download" onClick={() => download(g)}><Download width={16} height={16} /></button>
+                        <button type="button" className="ico-btn" title={isMaskEdit(g) ? 'Edit again' : 'Regenerate'} aria-label={isMaskEdit(g) ? 'Edit again' : 'Regenerate'} onClick={() => regenerate(g)}><RefreshCw width={16} height={16} /></button>
+                        <button type="button" className="ico-btn danger" title="Delete" aria-label="Delete" onClick={() => setConfirming(g)}><Trash2 width={16} height={16} /></button>
+                      </div>
+                    )}
                   </div>
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                    <button type="button" className="ico-btn" title="Download" aria-label="Download" onClick={() => download(g)}><Download width={16} height={16} /></button>
-                    <button type="button" className="ico-btn" title={isMaskEdit(g) ? 'Edit again' : 'Regenerate'} aria-label={isMaskEdit(g) ? 'Edit again' : 'Regenerate'} onClick={() => regenerate(g)}><RefreshCw width={16} height={16} /></button>
-                    <button type="button" className="ico-btn danger" title="Delete" aria-label="Delete" onClick={() => setConfirming(g)}><Trash2 width={16} height={16} /></button>
-                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* Floating compare bar */}
+      {comparing && compareIds.length > 0 && (
+        <div
+          style={{
+            position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 40,
+            display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px 10px 18px',
+            borderRadius: 999, background: 'var(--char)', color: '#fff', boxShadow: '0 20px 44px -16px rgba(0,51,44,.55)',
+          }}
+        >
+          <span style={{ fontSize: 13.5, fontWeight: 600 }}>
+            {compareIds.length} {compareIds.length === 1 ? 'design' : 'designs'} selected
+          </span>
+          <button
+            type="button"
+            className="btn btn-w btn-sm"
+            disabled={compareIds.length < 2}
+            onClick={() => setShowCompare(true)}
+          >
+            Compare
+          </button>
+        </div>
+      )}
+
+      {/* Compare view */}
+      <Dialog open={showCompare} onOpenChange={setShowCompare}>
+        <DialogContent className="max-w-6xl">
+          <DialogTitle>Compare {compareSet.length} designs</DialogTitle>
+          <DialogDescription>Side by side, so you can see which look actually wins.</DialogDescription>
+          <div
+            style={{
+              display: 'grid', gap: 14, marginTop: 4,
+              gridTemplateColumns: `repeat(${Math.min(compareSet.length, 2)}, 1fr)`,
+            }}
+          >
+            {compareSet.map((g) => (
+              <div key={g.id} className="rounded-2xl overflow-hidden" style={{ boxShadow: 'inset 0 0 0 1px var(--stone-2)' }}>
+                <StoredImage src={g.output_image_url ?? g.input_image_url} alt={titleFor(g)} style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', display: 'block' }} />
+                <div style={{ padding: '10px 14px' }}>
+                  <p style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink)' }}>{titleFor(g)}</p>
+                  <p style={{ fontSize: 12, color: 'var(--taupe)' }}>{formatDate(g.created_at)}</p>
                 </div>
               </div>
             ))}
           </div>
-        )}
-      </section>
+        </DialogContent>
+      </Dialog>
 
       {/* Detail view */}
       <Dialog open={!!viewing} onOpenChange={(open) => !open && setViewing(null)}>
