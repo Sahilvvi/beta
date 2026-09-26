@@ -51,6 +51,9 @@ export interface Generation {
   session_id?: string | null;
   /** The Repaint microservice's X-Repaint-Meta payload (coverage, timing, etc). Redesign rows leave this null. */
   meta?: Record<string, unknown> | null;
+  /** Set once this design has a public share link (thinkdecor.app/r/<slug>); null until shared. */
+  share_slug?: string | null;
+  shared_at?: string | null;
 }
 
 export class OutOfCreditsError extends Error {
@@ -225,6 +228,35 @@ export function useDeleteGeneration() {
         if (!count) toRemove.push(generation.input_image_url);
       }
       if (toRemove.length) await supabase.storage.from(BUCKET).remove(toRemove);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['generations'] }),
+  });
+}
+
+export function shareUrlFor(slug: string): string {
+  return `${window.location.origin}/r/${slug}`;
+}
+
+/** Turns a design's public share link on (assigning a slug the first time)
+ *  or off. RLS lets the owner update only their own row (20260927010000). */
+export function useShareGeneration() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ generation, shared }: { generation: Generation; shared: boolean }) => {
+      if (!shared) {
+        const { error } = await db.from('generations').update({ share_slug: null }).eq('id', generation.id);
+        if (error) throw error;
+        return null;
+      }
+      if (generation.share_slug) return generation.share_slug;
+      const slug = generation.share_slug ?? crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+      const { error } = await db
+        .from('generations')
+        .update({ share_slug: slug, shared_at: new Date().toISOString() })
+        .eq('id', generation.id);
+      if (error) throw error;
+      return slug;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['generations'] }),
   });

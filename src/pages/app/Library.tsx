@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Check, Columns3, Download, RefreshCw, Trash2, X } from 'lucide-react';
+import { Check, Columns3, Download, Link2, RefreshCw, Share2, Trash2, X } from 'lucide-react';
 
 import { SEO } from '@/components/shared/SEO';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -12,8 +12,8 @@ import {
 import { StoredCompare, StoredImage } from '@/components/app/StoredImage';
 import { ShopThisLook } from '@/components/app/ShopThisLook';
 import {
-  type Generation, downloadStoredImage, fileNameFor, formatDate, isSetupError, titleFor, useDeleteGeneration,
-  useGenerations,
+  type Generation, downloadStoredImage, fileNameFor, formatDate, isSetupError, shareUrlFor, titleFor,
+  useDeleteGeneration, useGenerations, useShareGeneration,
 } from '@/lib/generation';
 
 function download(g: Generation) {
@@ -37,6 +37,7 @@ export default function Library() {
   const [comparing, setComparing] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [showCompare, setShowCompare] = useState(false);
+  const shareGeneration = useShareGeneration();
   const MAX_COMPARE = 4;
 
   const toggleCompare = (id: string) => {
@@ -302,6 +303,31 @@ export default function Library() {
                   className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-[13.5px] font-medium text-foreground hover:bg-secondary"
                 >
                   <RefreshCw className="h-4 w-4" /> {isMaskEdit(viewing) ? 'Edit again' : 'Regenerate'}
+                </button>
+                <button
+                  type="button"
+                  disabled={shareGeneration.isPending}
+                  onClick={async () => {
+                    if (viewing.share_slug) {
+                      await navigator.clipboard.writeText(shareUrlFor(viewing.share_slug));
+                      toast.success('Share link copied');
+                      return;
+                    }
+                    try {
+                      const slug = await shareGeneration.mutateAsync({ generation: viewing, shared: true });
+                      if (slug) {
+                        await navigator.clipboard.writeText(shareUrlFor(slug));
+                        toast.success('Public link created and copied');
+                        setViewing((v) => (v ? { ...v, share_slug: slug } : v));
+                      }
+                    } catch (err) {
+                      toast.error((err as Error).message);
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-[13.5px] font-medium text-foreground hover:bg-secondary"
+                >
+                  {viewing.share_slug ? <Link2 className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+                  {viewing.share_slug ? 'Copy link' : 'Share'}
                 </button>
                 <button
                   type="button"

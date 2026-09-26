@@ -42,6 +42,7 @@ const Overview = lazyPage(() => import("./pages/app/Overview"));
 const Templates = lazyPage(() => import("./pages/app/Templates"));
 const Library = lazyPage(() => import("./pages/app/Library"));
 const Saved = lazyPage(() => import("./pages/app/Saved"));
+const Share = lazyPage(() => import("./pages/Share"));
 const Create = lazyPage(() => import("./pages/app/Create"));
 const Cleanup = lazyPage(() => import("./pages/app/Cleanup"));
 const Replace = lazyPage(() => import("./pages/app/Replace"));
@@ -114,6 +115,7 @@ function AppRoutes() {
       <Routes location={location} key={location.pathname}>
         {/* Home - AI Measurement + Mantha AI */}
         <Route path="/" element={<PageTransition><Home /></PageTransition>} />
+        <Route path="/r/:slug" element={<Share />} />
 
         {/* Contact */}
         <Route path="/contact" element={<PageTransition><Contact /></PageTransition>} />
