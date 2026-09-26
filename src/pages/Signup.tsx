@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,8 +13,8 @@ import { useAuthProviders } from '@/hooks/useAuthProviders';
 import { safeReturnPath } from '@/lib/returnPath';
 import { CAPTCHA_ENABLED } from '@/lib/captcha';
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft, Check, MailCheck, Eye, EyeOff } from 'lucide-react';
-import { FREE_SIGNUP_CREDITS } from '@/lib/generation';
+import { Loader2, ArrowLeft, Check, Gift, MailCheck, Eye, EyeOff } from 'lucide-react';
+import { FREE_SIGNUP_CREDITS, REFERRAL_BONUS_CREDITS } from '@/lib/generation';
 
 const benefits = [
   `${FREE_SIGNUP_CREDITS} free redesigns to start`,
@@ -42,6 +42,8 @@ export default function Signup() {
   const anyProvider = providers.google || providers.apple;
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const referralCode = searchParams.get('ref') ?? undefined;
 
   const captchaMissing = CAPTCHA_ENABLED && !captchaToken;
 
@@ -55,6 +57,7 @@ export default function Signup() {
       name.trim(),
       phone,
       captchaToken ?? undefined,
+      referralCode,
     );
 
     if (error) {
@@ -266,7 +269,17 @@ export default function Signup() {
 </>
 )}
 
-<motion.form onSubmit={handleSubmit} variants={staggerItem} className="space-y-5">
+{referralCode && (
+                    <motion.div
+                      variants={staggerItem}
+                      className="flex items-center gap-2.5 rounded-xl bg-secondary px-4 py-3 text-[13px] text-foreground/80"
+                    >
+                      <Gift className="h-4 w-4 flex-none text-primary" />
+                      A friend invited you — you'll both get {REFERRAL_BONUS_CREDITS} bonus {REFERRAL_BONUS_CREDITS === 1 ? 'credit' : 'credits'} on signup.
+                    </motion.div>
+                  )}
+
+                  <motion.form onSubmit={handleSubmit} variants={staggerItem} className="space-y-5">
                   <div className="space-y-2">
                     <Label htmlFor="name">Full name</Label>
                     <Input

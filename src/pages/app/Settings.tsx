@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  Camera, ExternalLink, Loader2, Lock, LogOut, Mail, User, Zap, LifeBuoy, CreditCard, Check,
+  Camera, Copy, ExternalLink, Gift, Loader2, Lock, LogOut, Mail, User, Zap, LifeBuoy, CreditCard, Check,
 } from 'lucide-react';
 
 import { SEO } from '@/components/shared/SEO';
@@ -12,6 +12,7 @@ import {
   isActiveSubscription, useProfile, useSubscription, useUpdateProfile,
 } from '@/hooks/useProfile';
 import { formatDate, isSetupError, useCreditBalance } from '@/lib/generation';
+import { referralUrlFor, useReferralCode, useReferralCount, REFERRAL_BONUS_CREDITS } from '@/lib/generation';
 import { PHASE1_PLAN, money, pence } from '@/lib/billing';
 import { CheckoutError, openBillingPortal, syncBilling } from '@/lib/checkout';
 import { uploadAvatar, UploadError } from '@/lib/upload';
@@ -44,6 +45,13 @@ export default function Settings() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const updateProfile = useUpdateProfile();
   const { data: credits } = useCreditBalance();
+  const { data: referralCode } = useReferralCode();
+  const { data: referralCount } = useReferralCount();
+  const copyReferralLink = async () => {
+    if (!referralCode) return;
+    await navigator.clipboard.writeText(referralUrlFor(referralCode));
+    toast.success('Invite link copied');
+  };
   const queryClient = useQueryClient();
   const { data: subscription } = useSubscription();
   const { data: tickets } = useMyTickets();
@@ -402,6 +410,26 @@ export default function Settings() {
                     )}
                   </div>
                   {subscription && <p className="note2">Cancel, change your card or download invoices.</p>}
+                </section>
+
+                <section className="plan" style={{ marginTop: 20 }}>
+                  <div className="kicker"><Gift width={14} height={14} /> Invite friends</div>
+                  <div className="big" style={{ fontSize: 15, fontWeight: 500 }}>
+                    Share your link — you both get {REFERRAL_BONUS_CREDITS} free {REFERRAL_BONUS_CREDITS === 1 ? 'redesign' : 'redesigns'} when they sign up.
+                  </div>
+                  {referralCode && (
+                    <div className="acts" style={{ marginTop: 14 }}>
+                      <code style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, padding: '10px 14px', borderRadius: 999, background: 'var(--mist)' }}>
+                        {referralUrlFor(referralCode)}
+                      </code>
+                      <button type="button" className="btn btn-w" onClick={copyReferralLink}>
+                        <Copy width={15} height={15} /> Copy link
+                      </button>
+                    </div>
+                  )}
+                  {!!referralCount && (
+                    <p className="note2">{referralCount} {referralCount === 1 ? 'friend has' : 'friends have'} joined with your link.</p>
+                  )}
                 </section>
               </>
             )}

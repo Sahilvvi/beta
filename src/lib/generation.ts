@@ -20,6 +20,8 @@ import { downscaleFile, downscaleImage } from '@/lib/image';
  */
 
 export const FREE_SIGNUP_CREDITS = 2;
+/** Mirrors app_settings.ai.referral_bonus's default (20260927020000_referral_credits.sql) — display only, the real grant is server-side. */
+export const REFERRAL_BONUS_CREDITS = 1;
 /** Mirrors the cap inside spend_credit() (20260914130000_generation_rate_limit.sql). */
 export const HOURLY_GENERATION_LIMIT = 10;
 
@@ -235,6 +237,42 @@ export function useDeleteGeneration() {
 
 export function shareUrlFor(slug: string): string {
   return `${window.location.origin}/r/${slug}`;
+}
+
+export function referralUrlFor(code: string): string {
+  return `${window.location.origin}/signup?ref=${code}`;
+}
+
+/** The signed-in user's own referral code (profiles.referral_code, assigned
+ *  by handle_new_user — 20260927020000_referral_credits.sql). */
+export function useReferralCode() {
+  return useQuery({
+    queryKey: ['referral-code'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data, error } = await db.from('profiles').select('referral_code').eq('user_id', user.id).maybeSingle();
+      if (error) throw error;
+      return (data?.referral_code as string | null | undefined) ?? null;
+    },
+  });
+}
+
+/** How many people have signed up using this user's referral code. */
+export function useReferralCount() {
+  return useQuery({
+    queryKey: ['referral-count'],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return 0;
+      const { count, error } = await db
+        .from('referrals')
+        .select('referee_id', { count: 'exact', head: true })
+        .eq('referrer_id', user.id);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
 }
 
 /** Turns a design's public share link on (assigning a slug the first time)

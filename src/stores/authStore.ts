@@ -19,6 +19,7 @@ interface AuthState {
     name: string,
     phone?: string,
     captchaToken?: string,
+    referralCode?: string,
   ) => Promise<AuthResult & { needsConfirmation: boolean }>;
   signIn: (email: string, password: string, captchaToken?: string) => Promise<AuthResult>;
   signInWithOAuth: (provider: 'google' | 'apple') => Promise<AuthResult>;
@@ -81,16 +82,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  signUp: async (email, password, name, phone, captchaToken) => {
+  signUp: async (email, password, name, phone, captchaToken, referralCode) => {
     set({ loading: true });
-    // name/phone ride along as user metadata — the handle_new_user() trigger
-    // reads them straight into the profiles row on insert.
+    // name/phone/ref ride along as user metadata — the handle_new_user() trigger
+    // reads them straight into the profiles row (and grants referral credits) on insert.
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/app`,
-        data: { name, phone: phone?.trim() || null },
+        data: { name, phone: phone?.trim() || null, ref: referralCode?.trim() || null },
         captchaToken,
       },
     });
