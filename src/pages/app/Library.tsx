@@ -319,17 +319,26 @@ export default function Library() {
                   type="button"
                   disabled={shareGeneration.isPending}
                   onClick={async () => {
+                    // Copying to the clipboard is a nice-to-have: it can throw when the tab
+                    // isn't focused (common right after opening a dialog), and that must never
+                    // hide that the share link itself was created/already exists.
+                    const copy = async (url: string, message: string) => {
+                      try {
+                        await navigator.clipboard.writeText(url);
+                        toast.success(message);
+                      } catch {
+                        toast.message('Link ready — copy it from the address bar', { description: url });
+                      }
+                    };
                     if (viewing.share_slug) {
-                      await navigator.clipboard.writeText(shareUrlFor(viewing.share_slug));
-                      toast.success('Share link copied');
+                      await copy(shareUrlFor(viewing.share_slug), 'Share link copied');
                       return;
                     }
                     try {
                       const slug = await shareGeneration.mutateAsync({ generation: viewing, shared: true });
                       if (slug) {
-                        await navigator.clipboard.writeText(shareUrlFor(slug));
-                        toast.success('Public link created and copied');
                         setViewing((v) => (v ? { ...v, share_slug: slug } : v));
+                        await copy(shareUrlFor(slug), 'Public link created and copied');
                       }
                     } catch (err) {
                       toast.error((err as Error).message);

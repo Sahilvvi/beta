@@ -121,7 +121,7 @@ export function ReelGenerator({ open, onClose, beforeUrl, afterUrl, label }: Ree
 
       const start = performance.now();
       const tick = () => {
-        if (stopRef.current || cancelled) { recorder.stop(); return; }
+        if (stopRef.current || cancelled) { clearInterval(intervalId); if (recorder.state !== 'inactive') recorder.stop(); return; }
         const t = (performance.now() - start) / 1000;
         setProgress(Math.min(1, t / TOTAL));
 
@@ -187,10 +187,14 @@ export function ReelGenerator({ open, onClose, beforeUrl, afterUrl, label }: Ree
           ctx.globalAlpha = 1;
         }
 
-        if (t >= TOTAL) { recorder.stop(); return; }
-        requestAnimationFrame(tick);
+        if (t >= TOTAL) { clearInterval(intervalId); if (recorder.state !== 'inactive') recorder.stop(); return; }
       };
-      requestAnimationFrame(tick);
+      // Driven by setInterval, not requestAnimationFrame: rAF callbacks are
+      // suspended outright for a hidden/backgrounded document in Chrome, and
+      // "generate a reel to share elsewhere" is exactly the workflow where a
+      // user switches tabs mid-recording. setInterval keeps firing (throttled,
+      // not stopped) so the recording still finishes instead of hanging.
+      const intervalId = setInterval(tick, 1000 / 30);
 
       await stopped;
       if (cancelled) return;
