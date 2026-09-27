@@ -5,6 +5,7 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { SEO } from '@/components/shared/SEO';
 import { BeforeAfterSlider } from '@/components/shared/BeforeAfterSlider';
+import { Reveal } from '@/components/premium/Motion';
 import { roomLabel, templateByKey, type RoomType } from '@/lib/templates';
 import { savePendingRemix } from '@/lib/remix';
 
@@ -64,54 +65,76 @@ export default function Share() {
         title={design ? `${label} redesign — Think Decor` : 'A shared redesign — Think Decor'}
         description="See this room before and after, redesigned by Mantha AI — then try it on your own room, free."
       />
-      <Navbar />
-      <main style={{ minHeight: '70vh' }}>
-        <section style={{ maxWidth: 980, margin: '0 auto', padding: '64px 20px 40px' }}>
-          <div style={{ textAlign: 'center', marginBottom: 32 }}>
-            <span className="kicker">Shared by a Think Decor user</span>
-            <h1 style={{ marginTop: 10 }}>
-              {design ? <>See <em>{label}</em>, redesigned</> : 'A shared redesign'}
-            </h1>
-          </div>
+      <div className="min-h-screen bg-background">
+        <Navbar />
+        <main className="pt-28">
+          <section className="px-3 pb-20 pt-6 sm:px-4">
+            <div className="container mx-auto max-w-[900px] px-6 sm:px-8">
+              <Reveal className="mb-10 text-center">
+                <p className="font-label text-[11px] font-bold uppercase tracking-[0.16em] text-primary">
+                  Shared by a Think Decor user
+                </p>
+                <h1 className="mx-auto mt-4 max-w-[26ch] font-display text-[clamp(1.9rem,4.5vw,3.2rem)] font-medium leading-[1.08] tracking-[-0.02em] text-foreground">
+                  {design ? <>See <em className="italic font-normal text-primary">{label}</em>, redesigned</> : 'A shared redesign'}
+                </h1>
+              </Reveal>
 
-          {loading ? (
-            <div className="w-full animate-pulse bg-secondary" style={{ aspectRatio: '4 / 3', borderRadius: 24 }} />
-          ) : error || !design ? (
-            <div style={{ textAlign: 'center', padding: '48px 20px' }}>
-              <p className="sub">{error ?? "This link isn't available."}</p>
-              <Link to="/app/create" className="btn btn-dark" style={{ marginTop: 20 }}>
-                Try it on your room <ArrowRight width={15} height={15} />
-              </Link>
-            </div>
-          ) : (
-            <>
-              <div style={{ borderRadius: 24, overflow: 'hidden', boxShadow: 'inset 0 0 0 1px var(--stone-2)' }}>
-                <BeforeAfterSlider
-                  beforeSrc={design.before}
-                  afterSrc={design.after}
-                  beforeAlt="Before"
-                  afterAlt="After — redesigned by Mantha AI"
-                  aspectRatio="aspect-[4/3]"
-                />
-              </div>
-              <div style={{ textAlign: 'center', marginTop: 36 }}>
-                <p className="sub">Upload your own room photo and see it redesigned in seconds.</p>
-                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 14, flexWrap: 'wrap' }}>
-                  {design.templateKey && (
-                    <button type="button" onClick={remixThisStyle} className="btn btn-dark">
-                      <Sparkles width={15} height={15} /> Remix this style
-                    </button>
-                  )}
-                  <Link to="/app/create" className={design.templateKey ? 'btn btn-line' : 'btn btn-dark'}>
-                    Try it on your room <ArrowRight width={15} height={15} />
+              {loading ? (
+                <div className="w-full animate-pulse rounded-[24px] bg-secondary" style={{ aspectRatio: '4 / 3' }} />
+              ) : error || !design ? (
+                <div className="py-12 text-center">
+                  <p className="text-[16px] text-foreground/70">{error ?? "This link isn't available."}</p>
+                  <Link
+                    to="/app/create"
+                    className="mt-6 inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-[14.5px] font-semibold text-primary-foreground transition-transform duration-300 hover:scale-[1.03]"
+                  >
+                    Try it on your room <ArrowRight className="h-4 w-4" />
                   </Link>
                 </div>
-              </div>
-            </>
-          )}
-        </section>
-      </main>
-      <Footer />
+              ) : (
+                <Reveal>
+                  <div className="overflow-hidden rounded-[24px] ring-1 ring-inset ring-border">
+                    <BeforeAfterSlider
+                      beforeSrc={design.before}
+                      afterSrc={design.after}
+                      beforeAlt="Before"
+                      afterAlt="After — redesigned by Mantha AI"
+                      aspectRatio="aspect-[4/3]"
+                    />
+                  </div>
+                  <div className="mt-9 text-center">
+                    <p className="text-[16px] text-foreground/70">
+                      Upload your own room photo and see it redesigned in seconds.
+                    </p>
+                    <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                      {design.templateKey && (
+                        <button
+                          type="button"
+                          onClick={remixThisStyle}
+                          className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-[14.5px] font-semibold text-primary-foreground transition-transform duration-300 hover:scale-[1.03]"
+                        >
+                          <Sparkles className="h-4 w-4" /> Remix this style
+                        </button>
+                      )}
+                      <Link
+                        to="/app/create"
+                        className={
+                          design.templateKey
+                            ? 'inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-[14.5px] font-semibold text-foreground/85 ring-1 ring-inset ring-border transition-colors hover:text-foreground hover:ring-foreground/40'
+                            : 'inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-[14.5px] font-semibold text-primary-foreground transition-transform duration-300 hover:scale-[1.03]'
+                        }
+                      >
+                        Try it on your room <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </div>
+                  </div>
+                </Reveal>
+              )}
+            </div>
+          </section>
+        </main>
+        <Footer />
+      </div>
     </>
   );
 }
