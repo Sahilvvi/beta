@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Check, Clapperboard, Columns3, Download, Link2, RefreshCw, Share2, Trash2, X } from 'lucide-react';
+import { Check, Columns3, Download, Link2, RefreshCw, Share2, Trash2, X } from 'lucide-react';
 
 import { SEO } from '@/components/shared/SEO';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -13,9 +13,8 @@ import { StoredCompare, StoredImage } from '@/components/app/StoredImage';
 import { ShopThisLook } from '@/components/app/ShopThisLook';
 import {
   type Generation, downloadStoredImage, fileNameFor, formatDate, isSetupError, shareUrlFor, titleFor,
-  useDeleteGeneration, useGenerations, useShareGeneration, useStoredImageUrl,
+  useDeleteGeneration, useGenerations, useShareGeneration,
 } from '@/lib/generation';
-import { ReelGenerator } from '@/components/app/ReelGenerator';
 
 function download(g: Generation) {
   if (g.output_image_url) downloadStoredImage(g.output_image_url, fileNameFor(g.output_image_url, `thinkdecor-${g.id.slice(0, 8)}`));
@@ -39,9 +38,6 @@ export default function Library() {
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [showCompare, setShowCompare] = useState(false);
   const shareGeneration = useShareGeneration();
-  const [reelFor, setReelFor] = useState<Generation | null>(null);
-  const reelBefore = useStoredImageUrl(reelFor?.input_image_url);
-  const reelAfter = useStoredImageUrl(reelFor?.output_image_url ?? undefined);
   const MAX_COMPARE = 4;
 
   const toggleCompare = (id: string) => {
@@ -310,13 +306,6 @@ export default function Library() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setReelFor(viewing)}
-                  className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-[13.5px] font-medium text-foreground hover:bg-secondary"
-                >
-                  <Clapperboard className="h-4 w-4" /> Create reel
-                </button>
-                <button
-                  type="button"
                   disabled={shareGeneration.isPending}
                   onClick={async () => {
                     // Copying to the clipboard is a nice-to-have: it can throw when the tab
@@ -362,13 +351,9 @@ export default function Library() {
         </DialogContent>
       </Dialog>
 
-      <ReelGenerator
-        open={!!reelFor}
-        onClose={() => setReelFor(null)}
-        beforeUrl={reelBefore}
-        afterUrl={reelAfter}
-        label={reelFor ? titleFor(reelFor).split(' · ')[0] : ''}
-      />
+      {/* Reel generator: temporarily hidden — image-URL/canvas-capture timing bug
+          under investigation (canvas sometimes never receives the signed URLs).
+          Re-enable by restoring the "Create reel" button above and this block. */}
 
       {/* Delete confirmation */}
       <AlertDialog open={!!confirming} onOpenChange={(open) => !open && setConfirming(null)}>
