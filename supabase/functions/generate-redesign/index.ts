@@ -235,7 +235,7 @@ const THINKING_VARIANTS: Record<string, unknown>[] = [
  */
 async function beautifyPrompt(
   raw: string | undefined,
-  ctx: { kind: "redesign" | "replace"; roomLabel?: string; style?: string; detectedLabel?: string },
+  ctx: { kind: "redesign" | "replace" | "refine"; roomLabel?: string; style?: string; detectedLabel?: string },
   lead?: string,
 ): Promise<string> {
   const base = tidyPrompt(raw);
@@ -245,9 +245,12 @@ async function beautifyPrompt(
     ? "The note says what should REPLACE a selected object" +
       (ctx.detectedLabel ? ` (currently: ${ctx.detectedLabel})` : "") +
       ". Rewrite it as a short, concrete description of the new object only - type, material, colour, finish, size/shape - e.g. \"a low-profile grey linen sofa with slim oak legs\"."
-    : `The note describes changes to a ${ctx.roomLabel ?? "room"}` +
-      (ctx.style ? ` being restyled as: ${ctx.style}` : "") +
-      ". Rewrite it as one or two clear imperative sentences using concrete visual terms - materials, colours, finishes, lighting, furniture.";
+    : ctx.kind === "refine"
+      ? `The note is ONE small follow-up change to a ${ctx.roomLabel ?? "room"} that has already been redesigned` +
+        ". Rewrite it as a single short imperative sentence describing only that one change, in concrete visual terms - e.g. \"make the sofa a darker charcoal grey\". Never expand it into a wider restyle."
+      : `The note describes changes to a ${ctx.roomLabel ?? "room"}` +
+        (ctx.style ? ` being restyled as: ${ctx.style}` : "") +
+        ". Rewrite it as one or two clear imperative sentences using concrete visual terms - materials, colours, finishes, lighting, furniture.";
   const system =
     (lead?.trim() ? lead.trim() + " " : "You turn a homeowner's rough note into a precise instruction for an interior-design image editor. ") +
     brief +
@@ -295,7 +298,13 @@ async function beautifyPrompt(
   return base;
 }
 
-type Mode = "redesign" | "cleanup" | "replace";
+// "refine" is a conversational follow-up on an already-generated result
+// (e.g. "make the sofa darker") — same photo pipeline as redesign, but the
+// input is the PREVIOUS OUTPUT (not the original room) and the prompt asks
+// for one small targeted change instead of a whole-room restyle. Stored as
+// an ordinary 'redesign' row (see the insert below) — it's not a new kind
+// of generation, just a different way of producing one.
+type Mode = "redesign" | "cleanup" | "replace" | "refine";
 
 // Fixed prompt, word-for-word from CleanupViewModel.kt's REMOVE_PROMPT —
 // Cleanup only ever removes, so this isn't user-editable.
@@ -324,6 +333,24 @@ function replacePrompt(userPrompt: string | undefined, detectedLabel: string | u
     "marked area may remain — no trace, outline, or partial remnant of it. Match the surrounding " +
     "lighting, perspective, and materials so the edit blends in, make sure no red tint remains " +
     "anywhere in the final image, and keep every other part of the photo exactly as it was.";
+}
+
+// A conversational follow-up on an already-generated redesign — deliberately
+// the opposite emphasis of the redesign prompt above (which *demands* an
+// obvious whole-room change): here the model must touch as little as
+// possible and treat the photo it's given as the finished result, not the
+// original room.
+function refinePrompt(userPrompt: string | undefined, roomLabel: string | undefined): string {
+  const room = roomLabel ?? "room";
+  const instruction = userPrompt?.trim()
+    ? userPrompt.trim()
+    : "make the requested area look more finished and polished";
+  return `This photo is an already-redesigned ${room} — treat it as the finished result, not a draft. ` +
+    `Make exactly one additional change: ${instruction}. ` +
+    "This is a mandatory, non-negotiable requirement: everything else in the photo — every other " +
+    "surface, object, color, the architecture, camera angle and perspective — must stay pixel-for-pixel " +
+    "as close to the original as possible. Do not restyle, re-light, or otherwise reinterpret the room; " +
+    "make only the one change described.";
 }
 
 interface CatalogProduct {
@@ -511,7 +538,7 @@ Deno.serve(async (req) => {
     /** Redesign/Replace only — real catalog products (see public.products) to bring into the room. */
     productIds?: string[];
   };
-  const mode: Mode = rawMode === "cleanup" || rawMode === "replace" ? rawMode : "redesign";
+  const mode: Mode = rawMode === "cleanup" || rawMode === "replace" || rawMode === "refine" ? rawMode : "redesign";
   const productIds = mode !== "cleanup" && Array.isArray(rawProductIds)
     ? [...new Set(rawProductIds.filter((id): id is string => typeof id === "string"))].slice(0, MAX_PRODUCTS)
     : [];
@@ -520,10 +547,10 @@ Deno.serve(async (req) => {
   // redesign, but it's the one most likely to ignore a specific reference
   // product in favour of inventing its own, or to leave a masked object
   // half-erased/half-replaced instead of fully complying with the mask.
-  // Cleanup/Replace and product-referenced redesigns all depend on precise
-  // instruction-following, so all three try the more literal/preserving
-  // models first instead.
-  if (productIds.length || mode === "cleanup" || mode === "replace") {
+  // Cleanup/Replace/Refine and product-referenced redesigns all depend on
+  // precise instruction-following, so all four try the more literal/
+  // preserving models first instead.
+  if (productIds.length || mode === "cleanup" || mode === "replace" || mode === "refine") {
     models.sort((a, b) => Number(a.includes("lite")) - Number(b.includes("lite")));
   }
 
@@ -620,7 +647,9 @@ Deno.serve(async (req) => {
       ? CLEANUP_PROMPT
       : mode === "replace"
         ? productNote + replacePrompt(beautified, detectedLabel)
-        : productNote + [
+        : mode === "refine"
+          ? productNote + refinePrompt(beautified, roomLabel)
+          : productNote + [
           `Redesign this ${roomLabel ?? "room"} as a photorealistic interior photograph.`,
           stylePrompt ? `Style: ${stylePrompt}.` : "",
           beautified ? `Requested changes: ${beautified.replace(/[.\s]+$/, "")}.` : "",
@@ -661,12 +690,15 @@ Deno.serve(async (req) => {
         user_id: user.id,
         input_image_url: inputPath,
         output_image_url: outputPath,
-        template_key: mode === "redesign" ? (templateKey ?? null) : null,
-        room_type: mode === "redesign" ? (roomType ?? null) : null,
-        // Cleanup has no user prompt (fixed instruction); redesign and replace both do.
+        // Refine carries the original turn's style/room forward so it reads
+        // and behaves exactly like the redesign it's building on — it's
+        // stored as one, not tracked as a separate kind (see the Mode comment).
+        template_key: mode === "redesign" || mode === "refine" ? (templateKey ?? null) : null,
+        room_type: mode === "redesign" || mode === "refine" ? (roomType ?? null) : null,
+        // Cleanup has no user prompt (fixed instruction); every other mode does.
         prompt: mode === "cleanup" ? null : (prompt ?? null),
         status: "completed",
-        kind: mode,
+        kind: mode === "refine" ? "redesign" : mode,
       })
       .select()
       .single();

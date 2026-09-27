@@ -315,6 +315,10 @@ export interface GenerateRequest {
   attempt?: number;
   /** Real catalog products (see `products` table) to bring into the room, up to 3. */
   productIds?: string[];
+  /** 'refine': a small conversational follow-up on an existing result — `image`
+   *  is that result's OUTPUT (not the original room), and `prompt` is the one
+   *  change to make, e.g. "make the sofa darker". Omit for a normal redesign. */
+  mode?: 'refine';
 }
 
 /**
@@ -366,6 +370,7 @@ export async function generateRedesign({
   prompt,
   attempt = 0,
   productIds,
+  mode,
 }: GenerateRequest): Promise<Generation> {
   // 1. The source photo — uploaded once to the private bucket, then reused by
   //    every refinement of the same room.
@@ -391,9 +396,10 @@ export async function generateRedesign({
         templateKey,
         roomType,
         roomLabel: roomLabel(roomType),
-        stylePrompt: template?.prompt,
+        stylePrompt: mode === 'refine' ? undefined : template?.prompt,
         prompt: prompt?.trim() || undefined,
         productIds: productIds?.length ? productIds : undefined,
+        mode,
       },
     });
     if (error) {

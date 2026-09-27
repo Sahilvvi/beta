@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { SEO } from '@/components/shared/SEO';
 import { BeforeAfterSlider } from '@/components/shared/BeforeAfterSlider';
 import { roomLabel, templateByKey, type RoomType } from '@/lib/templates';
+import { savePendingRemix } from '@/lib/remix';
 
 interface SharedDesign {
   id: string;
@@ -14,6 +15,7 @@ interface SharedDesign {
   templateKey: string | null;
   roomType: RoomType | null;
   kind?: string;
+  prompt?: string | null;
   createdAt: string;
 }
 
@@ -22,9 +24,16 @@ interface SharedDesign {
  *  `generations` table directly. */
 export default function Share() {
   const { slug } = useParams<{ slug: string }>();
+  const navigate = useNavigate();
   const [design, setDesign] = useState<SharedDesign | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const remixThisStyle = () => {
+    if (!design) return;
+    savePendingRemix({ templateKey: design.templateKey, roomType: design.roomType, prompt: design.prompt });
+    navigate('/app/create');
+  };
 
   useEffect(() => {
     if (!slug) return;
@@ -87,9 +96,16 @@ export default function Share() {
               </div>
               <div style={{ textAlign: 'center', marginTop: 36 }}>
                 <p className="sub">Upload your own room photo and see it redesigned in seconds.</p>
-                <Link to="/app/create" className="btn btn-dark" style={{ marginTop: 14 }}>
-                  Try it on your room <ArrowRight width={15} height={15} />
-                </Link>
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 14, flexWrap: 'wrap' }}>
+                  {design.templateKey && (
+                    <button type="button" onClick={remixThisStyle} className="btn btn-dark">
+                      <Sparkles width={15} height={15} /> Remix this style
+                    </button>
+                  )}
+                  <Link to="/app/create" className={design.templateKey ? 'btn btn-line' : 'btn btn-dark'}>
+                    Try it on your room <ArrowRight width={15} height={15} />
+                  </Link>
+                </div>
               </div>
             </>
           )}

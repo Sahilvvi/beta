@@ -22,6 +22,7 @@ import {
 } from '@/lib/templates';
 import { useProducts, searchProductsForPrompt, MAX_PRODUCTS_PER_GENERATION, type Product } from '@/lib/products';
 import { BudgetFilter, MoreLikeThis, ProductTile } from '@/components/app/ProductPicker';
+import { consumePendingRemix } from '@/lib/remix';
 
 /** How long to wait after the last keystroke before searching for real products matching the prompt. */
 const PROMPT_PRODUCT_DEBOUNCE_MS = 700;
@@ -60,6 +61,10 @@ export default function Create() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const prefill = (location.state as PrefillState | null) ?? null;
+  // A style "remixed" from a public share page (/r/<slug>) — carried via
+  // sessionStorage so it survives a sign-in/sign-up detour. Read (and
+  // cleared) exactly once, on first render.
+  const pendingRemix = useRef(consumePendingRemix()).current;
 
   const { data: credits, isLoading: creditsLoading, error: creditsError } = useCreditBalance();
   const generate = useGenerate();
@@ -68,11 +73,20 @@ export default function Create() {
     prefill?.inputPath ? { kind: 'stored', path: prefill.inputPath } : null,
   );
   const [templateKey, setTemplateKey] = useState(
-    templateByKey(searchParams.get('template'))?.key ?? templateByKey(prefill?.templateKey)?.key ?? DEFAULT_TEMPLATE_KEY,
+    templateByKey(searchParams.get('template'))?.key
+      ?? templateByKey(prefill?.templateKey)?.key
+      ?? templateByKey(pendingRemix?.templateKey)?.key
+      ?? DEFAULT_TEMPLATE_KEY,
   );
-  const [roomType, setRoomType] = useState<RoomType>(prefill?.roomType ?? 'living');
-  const [prompt, setPrompt] = useState(prefill?.prompt ?? '');
+  const [roomType, setRoomType] = useState<RoomType>(prefill?.roomType ?? pendingRemix?.roomType ?? 'living');
+  const [prompt, setPrompt] = useState(prefill?.prompt ?? pendingRemix?.prompt ?? '');
+
+  useEffect(() => {
+    if (pendingRemix) toast.message('Style loaded from a shared design — upload your photo to try it.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [turns, setTurns] = useState<Turn[]>([]);
+  const [refineText, setRefineText] = useState<Record<string, string>>({});
   const [dragging, setDragging] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
   const [budgetMin, setBudgetMin] = useState('');
@@ -228,6 +242,7 @@ export default function Create() {
     attempt: number;
     restorePromptOnError?: boolean;
     productIds?: string[];
+    mode?: 'refine';
   }) => {
     const id = crypto.randomUUID();
     setTurns((prev) => [
@@ -253,6 +268,7 @@ export default function Create() {
         prompt: args.prompt,
         attempt: args.attempt,
         productIds: args.productIds,
+        mode: args.mode,
       });
       setTurns((prev) =>
         prev.map((t) => (t.id === id ? { ...t, status: 'done', result, sourceRef: result.input_image_url } : t)),
@@ -299,6 +315,25 @@ export default function Create() {
       prompt: turn.prompt,
       attempt: turn.attempt + 1,
       productIds: turn.productIds,
+    });
+  };
+
+  /** A conversational follow-up on an already-generated result — "make the
+   *  sofa darker" — without re-uploading or re-describing the whole room.
+   *  Builds on the OUTPUT (not the original photo) and asks for one small
+   *  targeted change; see generate-redesign's "refine" mode. */
+  const refine = (turn: Turn, text: string) => {
+    if (!user || !turn.result || busy || outOfCredits || !text.trim()) return;
+    run({
+      userId: user.id,
+      image: turn.result.output_image_url ?? turn.result.input_image_url,
+      sourceRef: turn.result.output_image_url ?? turn.result.input_image_url,
+      templateKey: turn.templateKey,
+      roomType: turn.roomType,
+      prompt: text.trim(),
+      attempt: turn.attempt + 1,
+      productIds: turn.productIds,
+      mode: 'refine',
     });
   };
 
@@ -407,6 +442,34 @@ export default function Create() {
                           className="btn btn-dark btn-sm"
                         >
                           <Download width={14} height={14} /> Download
+                        </button>
+                      </div>
+                      <div style={{ marginTop: 4, display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          value={refineText[turn.id] ?? ''}
+                          onChange={(e) => setRefineText((prev) => ({ ...prev, [turn.id]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !busy && !outOfCredits) {
+                              refine(turn, refineText[turn.id] ?? '');
+                              setRefineText((prev) => ({ ...prev, [turn.id]: '' }));
+                            }
+                          }}
+                          placeholder="One more change — e.g. Make the sofa darker"
+                          disabled={busy || outOfCredits}
+                          className="field"
+                          style={{ flex: 1, height: 38, paddingInline: 12, fontSize: 13.5 }}
+                        />
+                        <button
+                          type="button"
+                          disabled={busy || outOfCredits || !(refineText[turn.id] ?? '').trim()}
+                          onClick={() => {
+                            refine(turn, refineText[turn.id] ?? '');
+                            setRefineText((prev) => ({ ...prev, [turn.id]: '' }));
+                          }}
+                          className="btn btn-line btn-sm"
+                        >
+                          <Sparkles width={14} height={14} /> Refine
                         </button>
                       </div>
                     </div>

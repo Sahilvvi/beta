@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
 
   const { data: generation } = await admin
     .from("generations")
-    .select("id, input_image_url, output_image_url, template_key, room_type, kind, created_at")
+    .select("id, input_image_url, output_image_url, template_key, room_type, kind, prompt, created_at")
     .eq("share_slug", slug)
     .not("share_slug", "is", null)
     .maybeSingle();
@@ -63,6 +63,9 @@ Deno.serve(async (req) => {
     templateKey: generation.template_key,
     roomType: generation.room_type,
     kind: generation.kind,
+    // Safe to expose: the free-text description of what changed, never the
+    // owner's identity. Lets "remix this style" carry it over too.
+    prompt: generation.kind === "redesign" ? generation.prompt : null,
     createdAt: generation.created_at,
   });
 });
