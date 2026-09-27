@@ -18,18 +18,22 @@ const TOTAL = T_AFTER_END + T_OUTRO;
 
 const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Could not load image'));
-    img.src = src;
-  });
+/** Loads via fetch + createImageBitmap rather than `new Image()` —
+ *  HTMLImageElement's decode-and-fire-onload pipeline is tied to the
+ *  document's rendering lifecycle and silently never fires while the tab is
+ *  hidden/backgrounded (verified directly: an onload handler never ran after
+ *  10+s on a hidden document). fetch()/createImageBitmap() aren't part of
+ *  that pipeline and complete normally regardless of visibility — exactly
+ *  the condition a "make a reel to go share elsewhere" flow invites. */
+async function loadImage(src: string): Promise<ImageBitmap> {
+  const res = await fetch(src);
+  if (!res.ok) throw new Error('Could not load image');
+  const blob = await res.blob();
+  return createImageBitmap(blob);
 }
 
 /** Draws `img` centered in a WxH box, cropped ("cover") to fill it. */
-function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number) {
+function drawCover(ctx: CanvasRenderingContext2D, img: ImageBitmap, x: number, y: number, w: number, h: number) {
   const scale = Math.max(w / img.width, h / img.height);
   const dw = img.width * scale;
   const dh = img.height * scale;
@@ -97,9 +101,9 @@ export function ReelGenerator({ open, onClose, beforeUrl, afterUrl, label }: Ree
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      let before: HTMLImageElement;
-      let after: HTMLImageElement;
-      let mark: HTMLImageElement | null = null;
+      let before: ImageBitmap;
+      let after: ImageBitmap;
+      let mark: ImageBitmap | null = null;
       try {
         [before, after] = await Promise.all([loadImage(beforeUrl), loadImage(afterUrl)]);
         mark = await loadImage('/logo.png').catch(() => null);
@@ -110,7 +114,13 @@ export function ReelGenerator({ open, onClose, beforeUrl, afterUrl, label }: Ree
       }
       if (cancelled) return;
 
-      const stream = canvas.captureStream(30);
+      // captureStream(0) = manual mode: no automatic per-frame capture tied to
+      // the compositor, which (like rAF and image decode) is suspended for a
+      // hidden document — an automatic-mode stream verified to produce only a
+      // few dozen bytes of real video data there. Push each frame explicitly
+      // with track.requestFrame() right after drawing it instead.
+      const stream = canvas.captureStream(0);
+      const track = stream.getVideoTracks()[0];
       const mimeType = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
         .find((t) => MediaRecorder.isTypeSupported(t)) ?? 'video/webm';
       const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6_000_000 });
@@ -187,6 +197,7 @@ export function ReelGenerator({ open, onClose, beforeUrl, afterUrl, label }: Ree
           ctx.globalAlpha = 1;
         }
 
+        track.requestFrame();
         if (t >= TOTAL) { clearInterval(intervalId); if (recorder.state !== 'inactive') recorder.stop(); return; }
       };
       // Driven by setInterval, not requestAnimationFrame: rAF callbacks are
