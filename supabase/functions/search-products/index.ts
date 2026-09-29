@@ -45,36 +45,82 @@ const LIVE_TOPUP_LIMIT = 6;
 const MAX_CATEGORIES = 2;
 const MAX_TOTAL_RESULTS = 14;
 
-// Stripped out of the free-text prompt before it's used as a fallback search
-// query (see below) — otherwise "i want to change the cupboard" gets searched
-// verbatim and returns nothing useful.
+// Stripped out of the free-text prompt before it's used as a search query —
+// otherwise "i want to change the cupboard" gets searched verbatim and
+// returns nothing useful.
 const STOPWORDS = new Set([
   "i", "want", "to", "change", "the", "a", "an", "and", "with", "for", "my", "add", "remove", "replace",
   "keep", "it", "as", "in", "on", "into", "some", "of", "this", "that", "these", "those", "make", "get",
   "put", "new", "different", "please", "need", "instead", "there", "here", "room", "up",
 ]);
 
-interface CategoryTarget { category: string; keyword: string }
+// A bare Google Shopping search for a common word ("lamp", "storage") pulls
+// back results that are technically that word but nothing to do with home
+// decor (a UV nail lamp, storage luggage). Anything whose title contains one
+// of these is dropped before it reaches the catalog — the "home decor" text
+// appended to fallback queries below only nudges Google's own ranking and
+// can't be trusted alone.
+const OFF_TOPIC_TITLE_WORDS = [
+  "lotion", "cream", "cc cream", "serum", "shampoo", "conditioner", "sunscreen", "moisturizer", "deodorant",
+  "bra", "bras", "underwear", "panty", "panties", "lingerie", "boxer briefs", "thong",
+  "perfume", "cologne", "makeup", "cosmetic", "cosmetics", "lipstick", "mascara", "nail polish",
+  "vitamin", "supplement", "protein powder", "capsules", "tablets",
+  "phone case", "iphone", "android phone", "laptop", "headphone", "earbud", "charger cable", "usb cable",
+  "sneaker", "sandals", "running shoe", "t-shirt", "jeans", "hoodie", "swimsuit", "bikini",
+  "diaper", "baby formula", "pet food", "dog food", "cat food", "cat litter",
+  "video game", "game console", "controller",
+];
+
+// Plain substring matching would reject "Antique Brass Body" (contains
+// "bras") or "creamy white sofa" (contains "cream") — match whole words only.
+const OFF_TOPIC_PATTERN = new RegExp(
+  `\\b(${OFF_TOPIC_TITLE_WORDS.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`,
+  "i",
+);
+
+function looksLikeHomeDecor(title: string): boolean {
+  return !OFF_TOPIC_PATTERN.test(title);
+}
+
+interface CategoryTarget { category: string; keyword: string; descriptors: string[]; categoryWords: string[] }
+
+/** Everything left of the prompt once filler words are stripped — "large
+ *  blue velvet sofa for the living room" becomes ["large","blue","velvet","sofa","living"].
+ *  Used both as the live-search query and to check whether already-cached
+ *  local products actually match what was described, not just the category. */
+function extractDescriptors(promptLower: string): string[] {
+  return promptLower.replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w && !STOPWORDS.has(w));
+}
 
 /** Named categories first; if the prompt doesn't mention any of them by a
  *  known synonym, fall back to the generic "other" category and search
  *  live using whatever's left of the prompt after stripping filler words —
  *  so an unanticipated word ("cupboard" before it was added above, or
  *  anything else not yet on the list) still returns *something* instead of
- *  silently going empty. */
+ *  silently going empty.
+ *
+ *  `keyword` is always the full descriptive phrase, not just the bare
+ *  category word — a one-word prompt ("sofa") and a full sentence ("a large
+ *  blue velvet sofa for my living room") used to collapse to the exact same
+ *  live-search query because only the matched synonym was kept. */
 function detectTargets(promptLower: string): CategoryTarget[] {
+  const descriptors = extractDescriptors(promptLower);
+  const fullQuery = descriptors.join(" ").trim();
+
   const found: CategoryTarget[] = [];
   for (const [category, keywords] of CATEGORY_KEYWORDS) {
     if (found.some((f) => f.category === category)) continue;
     const hit = keywords.find((k) => promptLower.includes(k));
-    if (hit) found.push({ category, keyword: hit.trim() });
+    if (hit) {
+      found.push({ category, keyword: fullQuery || hit.trim(), descriptors, categoryWords: hit.trim().split(/\s+/) });
+    }
     if (found.length >= MAX_CATEGORIES) break;
   }
   if (found.length > 0) return found;
 
-  const words = promptLower.replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w && !STOPWORDS.has(w));
-  const keyword = words.join(" ").trim();
-  return keyword ? [{ category: "other", keyword }] : [];
+  return fullQuery
+    ? [{ category: "other", keyword: `${fullQuery} home decor`, descriptors, categoryWords: [] }]
+    : [];
 }
 
 interface ShoppingProduct {
@@ -138,19 +184,37 @@ Deno.serve(async (req) => {
 
   const rapidApiKey = Deno.env.get("RAPIDAPI_KEY");
 
-  for (const { category, keyword } of targets) {
+  for (const { category, keyword, descriptors, categoryWords } of targets) {
     let query = admin.from("products").select(columns).eq("category", category).eq("active", true);
     if (roomType) query = query.contains("room_types", [roomType]);
     if (minPrice != null) query = query.gte("price", minPrice);
     if (maxPrice != null) query = query.lte("price", maxPrice);
-    const { data: local } = await query.limit(8);
-    for (const row of local ?? []) {
+    const { data: local } = await query.limit(20);
+
+    // Words the prompt used beyond the bare category noun ("blue", "velvet",
+    // not "sofa") — what actually makes a description specific.
+    const extraDescriptors = descriptors.filter((w) => w.length > 2 && !categoryWords.includes(w));
+    const scored = (local ?? [])
+      .map((row) => ({
+        row,
+        score: extraDescriptors.filter((w) => String(row.name).toLowerCase().includes(w)).length,
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    for (const { row } of scored.slice(0, 8)) {
       const id = row.id as string;
       if (!seenIds.has(id)) { seenIds.add(id); all.push(row); }
     }
 
-    const localCount = (local ?? []).length;
-    if (localCount >= MIN_LOCAL_MATCHES || !rapidApiKey) continue;
+    // A plain "sofa" prompt is happy with any cached sofa. A specific one
+    // ("blue velvet sofa") should only count matches that actually mention
+    // those qualifiers — otherwise a cache full of generic sofas silently
+    // skips the live search that would have found a blue velvet one.
+    const relevantCount = extraDescriptors.length > 0
+      ? scored.filter((s) => s.score > 0).length
+      : scored.length;
+
+    if (relevantCount >= MIN_LOCAL_MATCHES || !rapidApiKey) continue;
 
     // Thin on that category locally — top it up with one small live search.
     try {
@@ -181,6 +245,7 @@ Deno.serve(async (req) => {
           const image = p.product_photos?.[0];
           const name = p.product_title?.trim();
           if (!image || !name || !p.product_id || existingBySku.has(p.product_id)) return null;
+          if (!looksLikeHomeDecor(name)) return null;
           return {
             name,
             category,

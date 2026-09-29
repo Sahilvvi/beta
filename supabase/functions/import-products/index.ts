@@ -34,6 +34,33 @@ type Category = typeof CATEGORIES[number];
 
 const CURRENCY_BY_COUNTRY: Record<string, string> = { us: "USD", gb: "GBP", ca: "CAD", au: "AUD" };
 
+// A bare Google Shopping search for a common word ("lamp", "storage") pulls
+// back results that are technically that word but nothing to do with home
+// decor (a UV nail lamp, storage luggage). Anything whose title contains one
+// of these is dropped before it ever reaches the catalog. Kept in sync with
+// the same list in search-products/index.ts.
+const OFF_TOPIC_TITLE_WORDS = [
+  "lotion", "cream", "cc cream", "serum", "shampoo", "conditioner", "sunscreen", "moisturizer", "deodorant",
+  "bra", "bras", "underwear", "panty", "panties", "lingerie", "boxer briefs", "thong",
+  "perfume", "cologne", "makeup", "cosmetic", "cosmetics", "lipstick", "mascara", "nail polish",
+  "vitamin", "supplement", "protein powder", "capsules", "tablets",
+  "phone case", "iphone", "android phone", "laptop", "headphone", "earbud", "charger cable", "usb cable",
+  "sneaker", "sandals", "running shoe", "t-shirt", "jeans", "hoodie", "swimsuit", "bikini",
+  "diaper", "baby formula", "pet food", "dog food", "cat food", "cat litter",
+  "video game", "game console", "controller",
+];
+
+// Plain substring matching would reject "Antique Brass Body" (contains
+// "bras") or "creamy white sofa" (contains "cream") — match whole words only.
+const OFF_TOPIC_PATTERN = new RegExp(
+  `\\b(${OFF_TOPIC_TITLE_WORDS.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`,
+  "i",
+);
+
+function looksLikeHomeDecor(title: string): boolean {
+  return !OFF_TOPIC_PATTERN.test(title);
+}
+
 // One RapidAPI call per item — kept small enough that a single batch run
 // can't silently exhaust a whole month's quota (the free plan is 100
 // calls/month total, shared with live "shop this" link resolution).
@@ -109,6 +136,7 @@ async function runOneImport(
       const image = p.product_photos?.[0];
       const name = p.product_title?.trim();
       if (!image || !name || !p.product_id) return null;
+      if (!looksLikeHomeDecor(name)) return null;
       return {
         name,
         category,
