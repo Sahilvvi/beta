@@ -71,6 +71,37 @@ const OFF_TOPIC_TITLE_WORDS = [
   "video game", "game console", "controller",
 ];
 
+// A deny-list can never be complete — Google Shopping happily returns
+// trading cards, a $4,000,000 watch, coffee, plastic cups and a menstrual
+// cup for words that aren't furniture synonyms (all of these actually made
+// it into the catalog before this list existed, none containing any
+// OFF_TOPIC_TITLE_WORDS). So this is the real gate: for a product to reach
+// the catalog its title must contain an actual home-decor / furniture word,
+// not just avoid a banned one. Named categories (sofa, chair...) already
+// come from a targeted search, but this still applies to them too — Google
+// Shopping's own ranking is not to be trusted alone, ever.
+const HOME_DECOR_ALLOW_WORDS = [
+  "sofa", "couch", "loveseat", "settee", "sectional", "chaise", "chesterfield",
+  "bed", "headboard", "footboard", "mattress", "bunk bed", "daybed",
+  "table", "nightstand", "console", "desk",
+  "chair", "armchair", "recliner", "ottoman", "stool", "bench", "footstool", "seater",
+  "lamp", "lighting", "light fixture", "chandelier", "pendant", "sconce",
+  "rug", "carpet", "floor mat", "runner",
+  "bookshelf", "bookcase", "shelf", "shelving", "cabinet", "wardrobe", "cupboard", "almirah",
+  "dresser", "drawers", "sideboard", "credenza", "tv unit", "tv stand", "tv console",
+  "vase", "wall art", "artwork", "painting", "print", "poster", "mirror", "picture frame", "wall decor",
+  "cushion", "throw pillow", "pillow cover", "curtain", "drape", "blinds", "tapestry",
+  "plant", "plant pot", "planter", "clock", "candle holder", "candlestick",
+  "throw blanket", "bedding", "duvet", "comforter", "quilt", "bed sheet",
+  "wallpaper", "room divider", "coat rack", "furniture", "home decor", "decor",
+  "coffee table", "dining table", "side table", "end table",
+];
+
+const HOME_DECOR_ALLOW_PATTERN = new RegExp(
+  `\\b(${HOME_DECOR_ALLOW_WORDS.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`,
+  "i",
+);
+
 // Plain substring matching would reject "Antique Brass Body" (contains
 // "bras") or "creamy white sofa" (contains "cream") — match whole words only.
 const OFF_TOPIC_PATTERN = new RegExp(
@@ -78,8 +109,18 @@ const OFF_TOPIC_PATTERN = new RegExp(
   "i",
 );
 
-function looksLikeHomeDecor(title: string): boolean {
-  return !OFF_TOPIC_PATTERN.test(title);
+// A product that a targeted, category-matched search returned (sofa, bed,
+// chair...) only needs to clear the deny-list — the search query itself
+// already scoped it. The allow-list is the harder gate, and it's reserved
+// for "other": that catch-all has no real category to lean on, so a name
+// match against known decor words is the only thing standing between
+// "brahma" and whatever junk Google Shopping decides is relevant. Applying
+// the allow-list to named categories too caused false rejects — a
+// "Chesterfield" sofa or a "2 Seater" listing doesn't literally say "sofa".
+function looksLikeHomeDecor(title: string, category: string): boolean {
+  if (OFF_TOPIC_PATTERN.test(title)) return false;
+  if (category === "other") return HOME_DECOR_ALLOW_PATTERN.test(title);
+  return true;
 }
 
 interface CategoryTarget { category: string; keyword: string; descriptors: string[]; categoryWords: string[] }
@@ -192,27 +233,36 @@ Deno.serve(async (req) => {
     const { data: local } = await query.limit(20);
 
     // Words the prompt used beyond the bare category noun ("blue", "velvet",
-    // not "sofa") — what actually makes a description specific.
+    // not "sofa") — what actually makes a description specific. For the
+    // "other" catch-all, categoryWords is always empty, so this is always
+    // every word the prompt used — which is exactly right: nothing in that
+    // bucket has a real category to fall back on, so a name match against
+    // the actual words typed is the only thing standing between "brahma"
+    // and whatever junk happens to already be cached under "other".
     const extraDescriptors = descriptors.filter((w) => w.length > 2 && !categoryWords.includes(w));
     const scored = (local ?? [])
+      // Old imports predate this allow-list — re-check every cached row on
+      // the way out too, not just what's freshly inserted below.
+      .filter((row) => looksLikeHomeDecor(String(row.name), category))
       .map((row) => ({
         row,
         score: extraDescriptors.filter((w) => String(row.name).toLowerCase().includes(w)).length,
       }))
       .sort((a, b) => b.score - a.score);
 
-    for (const { row } of scored.slice(0, 8)) {
+    // A plain "sofa" prompt is happy with any cached sofa. A specific one
+    // ("blue velvet sofa"), or anything routed through "other", should only
+    // surface matches that actually mention those words — otherwise a cache
+    // full of unrelated "other" products silently answers a search that
+    // doesn't describe any of them.
+    const relevant = extraDescriptors.length > 0 ? scored.filter((s) => s.score > 0) : scored;
+
+    for (const { row } of relevant.slice(0, 8)) {
       const id = row.id as string;
       if (!seenIds.has(id)) { seenIds.add(id); all.push(row); }
     }
 
-    // A plain "sofa" prompt is happy with any cached sofa. A specific one
-    // ("blue velvet sofa") should only count matches that actually mention
-    // those qualifiers — otherwise a cache full of generic sofas silently
-    // skips the live search that would have found a blue velvet one.
-    const relevantCount = extraDescriptors.length > 0
-      ? scored.filter((s) => s.score > 0).length
-      : scored.length;
+    const relevantCount = relevant.length;
 
     if (relevantCount >= MIN_LOCAL_MATCHES || !rapidApiKey) continue;
 
@@ -245,7 +295,7 @@ Deno.serve(async (req) => {
           const image = p.product_photos?.[0];
           const name = p.product_title?.trim();
           if (!image || !name || !p.product_id || existingBySku.has(p.product_id)) return null;
-          if (!looksLikeHomeDecor(name)) return null;
+          if (!looksLikeHomeDecor(name, category)) return null;
           return {
             name,
             category,

@@ -33,7 +33,7 @@ const SLIDES = [
  */
 export function Testimonials() {
   const trackRef = useRef<HTMLDivElement>(null);
-  const trackInView = useInViewOrStacked(trackRef, { once: true, margin: '-10% 0px' });
+  const trackInView = useInViewOrStacked(trackRef, { once: true, margin: '0px 0px -10% 0px' });
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
   const perView = usePerView();

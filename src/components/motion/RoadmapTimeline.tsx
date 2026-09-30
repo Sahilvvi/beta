@@ -83,7 +83,7 @@ export function RoadmapTimeline() {
                     <motion.span
                       initial={{ scale: 0, opacity: 0 }}
                       whileInView={{ scale: 1, opacity: 1 }}
-                      viewport={{ once: true, margin: '-15% 0px' }}
+                      viewport={{ once: true, margin: '0px 0px -15% 0px' }}
                       transition={{ type: 'spring', stiffness: 380, damping: 20, delay: i * 0.06 }}
                       className={cn(
                         'relative flex h-14 w-14 items-center justify-center rounded-2xl border shadow-sm',
@@ -105,7 +105,7 @@ export function RoadmapTimeline() {
                   <motion.div
                     initial={{ opacity: 0, x: onRight ? 18 : -18 }}
                     whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true, margin: '-15% 0px' }}
+                    viewport={{ once: true, margin: '0px 0px -15% 0px' }}
                     transition={{ duration: 0.7, delay: i * 0.06, ease: [0.22, 1, 0.36, 1] }}
                     className={cn(
                       'pl-[4.5rem] sm:pl-0',

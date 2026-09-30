@@ -25,7 +25,13 @@ export function Reveal({
   // reports true this deep in a sticky ancestor (confirmed against a plain
   // IntersectionObserver on the same node, which does), so treat it as
   // always visible there — the panel's own stacking motion is the entrance.
-  const inView = useInViewOrStacked(ref, { once, margin: '-12% 0px -12% 0px' });
+  // Only the bottom edge is excluded (delays the trigger slightly as content
+  // rises into view). The top edge must NOT be excluded — a symmetric
+  // margin here used to strand already-on-screen content at opacity:0
+  // forever after a fast scroll (common on laptop trackpads) landed an
+  // element's top inside the excluded band before it was ever observed
+  // crossing into the "active" zone.
+  const inView = useInViewOrStacked(ref, { once, margin: '0px 0px -12% 0px' });
   return (
     <motion.div
       ref={ref}
@@ -42,7 +48,7 @@ export function Reveal({
 /* Stagger container + item */
 export function Stagger({ children, className = '', gap = 0.09 }: { children: ReactNode; className?: string; gap?: number }) {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInViewOrStacked(ref, { once: true, margin: '-10% 0px' });
+  const inView = useInViewOrStacked(ref, { once: true, margin: '0px 0px -10% 0px' });
   return (
     <motion.div
       ref={ref}
@@ -66,7 +72,7 @@ export const staggerItem = {
 /* ------------------------------------------------------------------ */
 export function RevealWords({ text, className = '', delay = 0 }: { text: string; className?: string; delay?: number }) {
   const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInViewOrStacked(ref, { once: true, margin: '-10% 0px' });
+  const inView = useInViewOrStacked(ref, { once: true, margin: '0px 0px -10% 0px' });
   return (
     <span ref={ref} className={className}>
       {text.split(' ').map((w, i) => (
@@ -133,7 +139,7 @@ export function Counter({
   className?: string;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInViewOrStacked(ref, { once: true, margin: '-20% 0px' });
+  const inView = useInViewOrStacked(ref, { once: true, margin: '0px 0px -20% 0px' });
   const [val, setVal] = useState(0);
 
   useEffect(() => {

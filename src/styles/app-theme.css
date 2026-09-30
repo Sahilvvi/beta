@@ -199,8 +199,8 @@
 .app-x .sx .v{font:500 34px/1 var(--display);color:var(--char)}
 .app-x .sx .l{font:600 13px/1.2 var(--mono);color:var(--ink)}
 .app-x .sx .d{font-size:12px;color:var(--taupe-2);margin-top:3px}
-.app-x .sx .go{margin-left:auto;color:var(--taupe-2);transition:transform .25s var(--ease),color .2s}
-.app-x .sx:hover .go{transform:translateX(3px);color:var(--brass)}
+.app-x .sx .stat-go{margin-left:auto;color:var(--taupe-2);transition:transform .25s var(--ease),color .2s}
+.app-x .sx:hover .stat-go{transform:translateX(3px);color:var(--brass)}
 
 .app-x .sec{display:flex;align-items:flex-end;justify-content:space-between;margin-top:36px}
 .app-x .sec h3{font-size:28px;line-height:1}

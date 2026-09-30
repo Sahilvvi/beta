@@ -76,7 +76,7 @@ function Crosshair({ className }: { className?: string }) {
  * ------------------------------------------------------------------ */
 export function StyleRing() {
   const sectionRef = useRef<HTMLElement>(null);
-  const inView = useInViewOrStacked(sectionRef, { margin: '-20% 0px' });
+  const inView = useInViewOrStacked(sectionRef, { margin: '0px 0px -20% 0px' });
   const reduce = useReducedMotion();
   const { radius, w, perspective } = useRingSize();
 

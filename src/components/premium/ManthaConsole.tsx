@@ -26,7 +26,7 @@ type Phase = 'idle' | 'typing' | 'thinking' | 'done';
 
 export function ManthaConsole() {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInViewOrStacked(ref, { once: true, margin: '-20% 0px' });
+  const inView = useInViewOrStacked(ref, { once: true, margin: '0px 0px -20% 0px' });
   const started = useRef(false);
 
   const [phase, setPhase] = useState<Phase>('idle');

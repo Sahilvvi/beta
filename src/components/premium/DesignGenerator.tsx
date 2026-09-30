@@ -6,7 +6,7 @@ import {
   AnimatePresence, motion, useReducedMotion,
 } from 'framer-motion';
 import {
-  ArrowRight, RefreshCw, Sparkles, Upload,
+  ArrowLeftRight, ArrowRight, RefreshCw, Sparkles, Upload,
 } from 'lucide-react';
 import { Reveal, Stagger, staggerItem } from './Motion';
 import { cn } from '@/lib/utils';
@@ -218,7 +218,7 @@ export function DesignGenerator() {
   const setFromEvent = useCallback((clientX: number) => {
     const r = boxRef.current?.getBoundingClientRect();
     if (!r) return;
-    setSplit(Math.min(90, Math.max(10, ((clientX - r.left) / r.width) * 100)));
+    setSplit(Math.min(100, Math.max(0, ((clientX - r.left) / r.width) * 100)));
   }, []);
 
   return (
@@ -439,8 +439,7 @@ export function DesignGenerator() {
                       className="absolute top-1/2 z-10 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full border-2 border-white bg-primary text-primary-foreground shadow-[0_6px_20px_rgba(0,0,0,0.35)] transition-transform hover:scale-110 active:scale-95"
                       style={!hinted ? { left: `${split}%` } : undefined}
                     >
-                      <ArrowRight className="h-3 w-3 -translate-x-[2px] rotate-180" />
-                      <ArrowRight className="h-3 w-3 -translate-x-[1px]" />
+                      <ArrowLeftRight className="h-4 w-4" />
                     </motion.button>
 
                     <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-black/55 px-3 py-1.5 font-label text-[10.5px] font-medium uppercase tracking-[0.08em] text-white">

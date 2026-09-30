@@ -47,7 +47,7 @@ function useBoxSize<T extends HTMLElement>() {
  * ------------------------------------------------------------------ */
 export function RoomAnatomy({ features }: { features: string[] }) {
   const sectionRef = useRef<HTMLElement>(null);
-  const inView = useInViewOrStacked(sectionRef, { margin: '-15% 0px' });
+  const inView = useInViewOrStacked(sectionRef, { margin: '0px 0px -15% 0px' });
   const reduce = useReducedMotion();
   const [boxRef, box] = useBoxSize<HTMLDivElement>();
   const [sel, setSel] = useState(0);

@@ -157,7 +157,7 @@ function Stage({ n }: { n: number }) {
 /* ------------------------------------------------------------------ */
 export function FourSteps() {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInViewOrStacked(ref, { margin: '-15% 0px' });
+  const inView = useInViewOrStacked(ref, { margin: '0px 0px -15% 0px' });
   const [active, setActive] = useState(0);
   const paused = useRef(false);
 

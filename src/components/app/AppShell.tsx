@@ -5,6 +5,10 @@ import {
   Settings as SettingsIcon, Eraser, Replace as ReplaceIcon, Search, FolderOpen, Heart, Zap, Menu, X, CornerDownLeft,
 } from 'lucide-react';
 import '@/styles/app-theme.css';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useAuthStore } from '@/stores/authStore';
 import { isActiveSubscription, useDisplayName, useSubscription } from '@/hooks/useProfile';
 import { useCreditBalance, useGenerationsRealtime, useGenerations, titleFor } from '@/lib/generation';
@@ -129,9 +133,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     ['Studio', 'Overview'];
   const fraction = credits === undefined ? 0 : Math.max(0, Math.min(1, credits / PHASE1_PLAN.credits));
 
+  const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const handleSignOut = async () => {
+    setConfirmingSignOut(false);
+    // Navigate away from /app *before* the session actually clears — once
+    // `user` goes null, ProtectedRoute's own <Navigate to="/login"> fires
+    // immediately, and it wins the race against a navigate('/') called
+    // after awaiting signOut(). Leaving the protected tree first means that
+    // redirect never has a route left to fire on.
+    navigate('/', { replace: true });
     await signOut();
-    navigate('/login', { replace: true });
   };
 
   return (
@@ -142,7 +153,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button type="button" className="side-close" onClick={() => setMenuOpen(false)} aria-label="Close menu">
             <X width={18} height={18} />
           </button>
-          <div className="brand"><img src="/logo.png?v=5" alt="" className="brand__mark" /><b>Think</b> <i>Decor</i></div>
+          <Link to="/" className="brand"><img src="/logo.png?v=5" alt="" className="brand__mark" /><b>Think</b> <i>Decor</i></Link>
 
           <Link to="/app/create" className="newbtn">
             <Plus width={16} height={16} strokeWidth={2.2} />New design<kbd>N</kbd>
@@ -206,7 +217,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <b>{fullName}</b>
                 <span>{email}</span>
               </div>
-              <button type="button" onClick={handleSignOut} aria-label="Sign out"><LogOut width={16} height={16} /></button>
+              <button type="button" onClick={() => setConfirmingSignOut(true)} aria-label="Sign out"><LogOut width={16} height={16} /></button>
             </div>
           </div>
         </aside>
@@ -223,7 +234,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <Menu width={20} height={20} />
             </button>
-            <Link to="/app" className="top-brand"><img src="/logo.png?v=5" alt="" className="brand__mark invert" /><b>Think</b> <i>Decor</i></Link>
+            <Link to="/" className="top-brand"><img src="/logo.png?v=5" alt="" className="brand__mark invert" /><b>Think</b> <i>Decor</i></Link>
             <div className="crumb">
               {crumb[0]}
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
@@ -303,6 +314,21 @@ export function AppShell({ children }: { children: ReactNode }) {
           </NavLink>
         </nav>
       </div>
+
+      <AlertDialog open={confirmingSignOut} onOpenChange={setConfirmingSignOut}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to log out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You'll need to sign in again to get back to your projects and designs.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSignOut}>Log out</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

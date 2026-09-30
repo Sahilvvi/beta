@@ -50,6 +50,35 @@ const OFF_TOPIC_TITLE_WORDS = [
   "video game", "game console", "controller",
 ];
 
+// A deny-list can never be complete — Google Shopping happily returns
+// trading cards, a $4,000,000 watch, coffee, plastic cups and a menstrual
+// cup for words that aren't furniture synonyms (all of these actually made
+// it into the catalog before this list existed, none containing any
+// OFF_TOPIC_TITLE_WORDS). So this is the real gate: for a product to reach
+// the catalog its title must contain an actual home-decor / furniture word,
+// not just avoid a banned one. Kept in sync with search-products/index.ts.
+const HOME_DECOR_ALLOW_WORDS = [
+  "sofa", "couch", "loveseat", "settee", "sectional", "chaise", "chesterfield",
+  "bed", "headboard", "footboard", "mattress", "bunk bed", "daybed",
+  "table", "nightstand", "console", "desk",
+  "chair", "armchair", "recliner", "ottoman", "stool", "bench", "footstool", "seater",
+  "lamp", "lighting", "light fixture", "chandelier", "pendant", "sconce",
+  "rug", "carpet", "floor mat", "runner",
+  "bookshelf", "bookcase", "shelf", "shelving", "cabinet", "wardrobe", "cupboard", "almirah",
+  "dresser", "drawers", "sideboard", "credenza", "tv unit", "tv stand", "tv console",
+  "vase", "wall art", "artwork", "painting", "print", "poster", "mirror", "picture frame", "wall decor",
+  "cushion", "throw pillow", "pillow cover", "curtain", "drape", "blinds", "tapestry",
+  "plant", "plant pot", "planter", "clock", "candle holder", "candlestick",
+  "throw blanket", "bedding", "duvet", "comforter", "quilt", "bed sheet",
+  "wallpaper", "room divider", "coat rack", "furniture", "home decor", "decor",
+  "coffee table", "dining table", "side table", "end table",
+];
+
+const HOME_DECOR_ALLOW_PATTERN = new RegExp(
+  `\\b(${HOME_DECOR_ALLOW_WORDS.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`,
+  "i",
+);
+
 // Plain substring matching would reject "Antique Brass Body" (contains
 // "bras") or "creamy white sofa" (contains "cream") — match whole words only.
 const OFF_TOPIC_PATTERN = new RegExp(
@@ -57,8 +86,16 @@ const OFF_TOPIC_PATTERN = new RegExp(
   "i",
 );
 
-function looksLikeHomeDecor(title: string): boolean {
-  return !OFF_TOPIC_PATTERN.test(title);
+// A product from a targeted, category-matched search (sofa, bed, chair...)
+// only needs to clear the deny-list — the search query already scoped it.
+// The allow-list is the harder gate, reserved for "other": that catch-all
+// has no real category to lean on. Applying the allow-list to named
+// categories too caused false rejects — a "Chesterfield" sofa or a live
+// plant under "decor" doesn't literally say "sofa"/"plant" in every title.
+function looksLikeHomeDecor(title: string, category: string): boolean {
+  if (OFF_TOPIC_PATTERN.test(title)) return false;
+  if (category === "other") return HOME_DECOR_ALLOW_PATTERN.test(title);
+  return true;
 }
 
 // One RapidAPI call per item — kept small enough that a single batch run
@@ -136,7 +173,7 @@ async function runOneImport(
       const image = p.product_photos?.[0];
       const name = p.product_title?.trim();
       if (!image || !name || !p.product_id) return null;
-      if (!looksLikeHomeDecor(name)) return null;
+      if (!looksLikeHomeDecor(name, category)) return null;
       return {
         name,
         category,

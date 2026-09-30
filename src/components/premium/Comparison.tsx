@@ -104,7 +104,7 @@ function VerdictMark({ verdict, play, delay }: { verdict: Verdict; play: boolean
 
 export function Comparison() {
   const viewRef = useRef<HTMLDivElement>(null);
-  const play = useInViewOrStacked(viewRef, { once: true, margin: '-15% 0px' });
+  const play = useInViewOrStacked(viewRef, { once: true, margin: '0px 0px -15% 0px' });
   const usScore = ROWS.filter((r) => r.us === 'yes').length;
   const themScore = ROWS.reduce((n, r) => n + (r.them === 'yes' ? 1 : r.them === 'partly' ? 0.5 : 0), 0);
 

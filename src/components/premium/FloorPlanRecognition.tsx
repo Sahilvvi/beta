@@ -10,7 +10,7 @@ import { useInViewOrStacked } from '../motion/StackPanels';
  */
 export function FloorPlanRecognition() {
   const boxRef = useRef<HTMLDivElement>(null);
-  const inView = useInViewOrStacked(boxRef, { once: true, margin: '-12% 0px' });
+  const inView = useInViewOrStacked(boxRef, { once: true, margin: '0px 0px -12% 0px' });
   const [split, setSplit] = useState(52);
   const dragging = useRef(false);
 

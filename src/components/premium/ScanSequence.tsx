@@ -24,7 +24,7 @@ const POINTS = Array.from({ length: 76 }, (_, i) => ({
 /** Hero: phone scan → point cloud → floor plan → measurements → AI redesign. */
 export function ScanSequence() {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInViewOrStacked(ref, { margin: '-10% 0px' });
+  const inView = useInViewOrStacked(ref, { margin: '0px 0px -10% 0px' });
   const [stage, setStage] = useState(0);
 
   useEffect(() => {
