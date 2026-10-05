@@ -2,6 +2,8 @@ import { Logo } from '@/components/brand/Logo';
 import { Link } from 'react-router-dom';
 import { Linkedin, Instagram, MapPin, Mail } from 'lucide-react';
 import { PHASE1_PLAN, money, pence } from '@/lib/billing';
+import { useRef } from 'react';
+import { motion, useScroll, useSpring, useTransform } from 'framer-motion';
 
 // Read from the billing config so the footer can never quote a stale price.
 const INTRO = pence(PHASE1_PLAN.introPrice ?? 0.69);
@@ -146,13 +148,36 @@ export function Footer() {
         </div>
       </div>
 
-      {/* Oversized brand watermark bleeding off the bottom edge */}
-      <div
-        aria-hidden
-        className="pointer-events-none relative -mb-[0.2em] select-none text-center text-[clamp(4rem,16vw,15rem)] font-bold leading-none tracking-[-0.06em] text-foreground/[0.04]"
-      >
-        Think Decor
-      </div>
+      <FooterWordmark />
     </footer>
+  );
+}
+
+/**
+ * Oversized brand watermark bleeding off the bottom edge. As the footer
+ * scrolls in, a teal gradient copy wipes across the faint base layer and the
+ * whole word lifts slightly — the page "signs off".
+ */
+function FooterWordmark() {
+  const ref = useRef<HTMLDivElement>(null);
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end end'] });
+  const p = useSpring(scrollYProgress, { stiffness: 120, damping: 28, restDelta: 0.001 });
+  const clip = useTransform(p, [0.15, 0.95], ['inset(0 100% 0 0)', 'inset(0 0% 0 0)']);
+  const y = useTransform(p, [0, 1], ['18%', '0%']);
+  const text = 'Think Decor';
+  const base = 'select-none whitespace-nowrap text-center text-[clamp(4rem,16vw,15rem)] font-bold leading-none tracking-[-0.06em]';
+
+  return (
+    <div ref={ref} aria-hidden className="pointer-events-none relative -mb-[0.2em] overflow-hidden">
+      <motion.div style={{ y }} className="relative">
+        <div className={`${base} text-foreground/[0.04]`}>{text}</div>
+        <motion.div
+          style={{ clipPath: clip }}
+          className={`${base} absolute inset-0 bg-[linear-gradient(100deg,hsl(168_100%_17%/0.20),hsl(162_72%_46%/0.30)_55%,hsl(168_100%_17%/0.12))] bg-clip-text text-transparent`}
+        >
+          {text}
+        </motion.div>
+      </motion.div>
+    </div>
   );
 }

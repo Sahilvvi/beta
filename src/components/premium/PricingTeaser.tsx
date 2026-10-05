@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, CreditCard, ShieldCheck } from 'lucide-react';
 import { PHASE1_PLAN, money, pence } from '@/lib/billing';
 import { Magnetic, Reveal } from './Motion';
+import { ProjectCalculator } from './ProjectCalculator';
 
 /**
  * Pricing — restyled to match the design prototype's plan-card language
@@ -75,6 +76,10 @@ export function PricingTeaser() {
               <span className="flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5 text-[#8FE3D4]" /> Cancel any time</span>
             </div>
           </div>
+        </Reveal>
+
+        <Reveal delay={0.15}>
+          <ProjectCalculator />
         </Reveal>
       </div>
     </section>

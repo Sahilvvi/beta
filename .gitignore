@@ -12,6 +12,7 @@ dist
 dist-new
 dist-ssr
 *.local
+deno.lock
 
 # Editor directories and files
 .vscode/*

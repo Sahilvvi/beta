@@ -23,7 +23,8 @@ import { Testimonials } from '@/components/premium/Testimonials';
 import { BlogTeaser } from '@/components/premium/BlogTeaser';
 import { CursorAura, ScrollProgress } from '@/components/motion/primitives';
 import type { TrustItem } from '@/components/motion/hooks';
-import { StackPanel, StackPanelGroup } from '@/components/motion/StackPanels';
+import { WalkPanel, WalkGroup } from '@/components/motion/WalkPanels';
+import { TinyPlanet } from '@/components/immersive/TinyPlanet';
 import { HeroStage } from '@/components/motion/HeroStage';
 import { HowItWorks } from '@/components/motion/HowItWorks';
 import { HangingCta } from '@/components/motion/HangingCta';
@@ -31,6 +32,8 @@ import { NewsletterBand } from '@/components/motion/NewsletterBand';
 import { FREE_SIGNUP_CREDITS } from '@/lib/generation';
 import { PHASE1_PLAN, money, pence } from '@/lib/billing';
 import { organizationSchema, softwareApplicationSchema, faqPageSchema } from '@/lib/schema';
+import { useSmoothScroll, smoothScrollTo } from '@/components/motion/useSmoothScroll';
+import { TourBackdrop, RoomEntry, RoomMap } from '@/components/motion/HouseTour';
 
 /* ---------------------------------------------------------------- *
  *  Homepage — a motion-led layout: 3D hero, a pinned "how it works"
@@ -102,7 +105,9 @@ export default function Home() {
   // the intro already played earlier in this same browser session (see
   // `introPlayedThisSession` above), or for an automated browser (see
   // `isAutomatedBrowser` above).
-  const skipIntro = introPlayedThisSession || isAutomatedBrowser;
+  // Dev-only: /?nointro jumps straight to the page while working on sections below the hero.
+  const devSkipIntro = import.meta.env.DEV && new URLSearchParams(window.location.search).has('nointro');
+  const skipIntro = introPlayedThisSession || isAutomatedBrowser || devSkipIntro;
   const [pageVisible, setPageVisible] = useState(skipIntro);
   const [introDone, setIntroDone] = useState(skipIntro);
   // The hero's own room photo, mounted underneath the intro the whole time
@@ -110,9 +115,11 @@ export default function Home() {
   // into, measured live rather than guessed, so the handoff lines up on
   // any viewport.
   const heroStageBoxRef = useRef<HTMLDivElement | null>(null);
+  // Smooth scrolling starts once the intro has handed scroll back to the page.
+  useSmoothScroll(introDone);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[#00231D]">
       <SEO
         title="Think Decor | AI Interior Design From a Photo"
         description={`Upload a photo of any room and Mantha AI redesigns it in the style you choose. Start with ${FREE_SIGNUP_CREDITS} free redesigns, then ${INTRO} for your first month.`}
@@ -141,17 +148,20 @@ export default function Home() {
         animate={{ opacity: pageVisible ? 1 : 0 }}
         transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
       >
+        {/* House tour: the room you're standing in; each <RoomEntry> below walks you to its door. */}
+        <TourBackdrop />
         <ScrollProgress />
         <CursorAura />
         <Navbar />
+        <RoomMap onJump={(y) => smoothScrollTo(y)} />
 
         <main className="relative z-10 overflow-clip">
 
         {/*
-          Stacking panels: the landing page's signature scroll mechanic
-          (ported from the design prototype). Each panel below sticks and
-          the next one slides up over it, scaling and dimming as it's
-          covered — a deck of cards, not a flat scroll. See StackPanels.tsx.
+          Walk-through panels: the landing page's scroll mechanic. Each
+          section opens like a doorway as it arrives, its headings and photos
+          move at different depths while you're in it, and it moves past you
+          as you walk on to the next one. See WalkPanels.tsx.
 
           Order matches the design prototype (Hero → How it works → offer
           strip → Mantha/templates → Testimonials → About → Comparison →
@@ -162,47 +172,61 @@ export default function Home() {
           Newsletter) has no equivalent in the prototype — kept for now, to
           be arranged later.
         */}
-        <StackPanelGroup className="px-3 sm:px-4">
-          <StackPanel>
+        <WalkGroup className="px-3 sm:px-4">
+          <WalkPanel>
             <HeroStage onStageBoxMount={(el) => { heroStageBoxRef.current = el; }} />
-          </StackPanel>
+          </WalkPanel>
+        </WalkGroup>
 
-          <StackPanel className="bg-gradient-to-b from-white to-[#EEF8F6]">
+        {/*
+          The portal (the reference site's signature move): a glowing circle
+          opens on a tiny planet of a room, and scrolling dives in until it
+          unfolds into a 360° view. It pins itself with sticky positioning,
+          so it sits between panel groups rather than inside a panel.
+        */}
+        <div className="mt-4">
+          <TinyPlanet />
+        </div>
+
+        {/*
+          The house tour (HouseTour.tsx): every section below lives behind a
+          door in its own room. You stand in the room, scroll to walk to its
+          doorway, and a circle opens from the door to reveal the section.
+        */}
+        <div className="mt-4">
+          <RoomEntry room="hallway" number={2} className="bg-gradient-to-b from-white to-[#EEF8F6]">
             <HowItWorks />
-          </StackPanel>
-
-          <StackPanel>
             <EarlyBirdStrip />
-          </StackPanel>
+          </RoomEntry>
 
-          <StackPanel>
+          <RoomEntry room="studio" number={3}>
             <DesignGenerator />
-          </StackPanel>
+          </RoomEntry>
 
           {/* StyleRing hidden — doesn't match the site's vibe (wrong/placeholder
               photos, e.g. an empty garage under "Warm Natural"). Needs a proper
               rebuild before it goes back in; tracked in the pending changes list. */}
 
           {/* ================= TESTIMONIALS ================= */}
-          <StackPanel className="bg-gradient-to-b from-[#E6F4F1] to-white">
+          <RoomEntry room="bedroom" number={4} className="bg-gradient-to-b from-[#E6F4F1] to-white">
             <Testimonials />
-          </StackPanel>
+          </RoomEntry>
 
           {/* ================= ABOUT ================= */}
-          <StackPanel>
+          <RoomEntry room="kitchen" number={5}>
             <AboutBlurb />
-          </StackPanel>
+          </RoomEntry>
 
-          <StackPanel>
+          <RoomEntry room="dining" number={6}>
             <Comparison />
-          </StackPanel>
+          </RoomEntry>
 
-          <StackPanel>
+          <RoomEntry room="snug" number={7}>
             <PricingTeaser />
-          </StackPanel>
+          </RoomEntry>
 
           {/* ============================ FAQ ============================ */}
-          <StackPanel id="faq" className="relative scroll-mt-24 bg-background py-16 lg:py-24">
+          <RoomEntry room="reading" number={8} id="faq" className="scroll-mt-24 bg-background py-16 lg:py-24">
           <div aria-hidden className="pointer-events-none absolute inset-0">
             <div className="absolute inset-0 bg-[linear-gradient(hsl(168_30%_20%/0.035)_1px,transparent_1px),linear-gradient(90deg,hsl(168_30%_20%/0.035)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_70%_55%_at_50%_0%,#000,transparent)]" />
           </div>
@@ -278,7 +302,7 @@ export default function Home() {
               </Stagger>
             </div>
           </div>
-          </StackPanel>
+          </RoomEntry>
 
           {/*
             ── Not in the prototype ──
@@ -286,7 +310,8 @@ export default function Home() {
             prototype. Kept in the build for now; order/placement still to
             be decided.
           */}
-          <StackPanel id="measurement" className="scroll-mt-24 bg-background py-16 lg:py-20">
+          <RoomEntry room="loft" number={9} id="measurement" className="scroll-mt-24 bg-background">
+            <div className="py-16 lg:py-20">
             <div className="container mx-auto max-w-[1200px] px-6 sm:px-8">
               <div className="grid gap-12 lg:grid-cols-[0.92fr_1.08fr] lg:items-center">
                 <div>
@@ -308,27 +333,21 @@ export default function Home() {
                 </Reveal>
               </div>
             </div>
-          </StackPanel>
-
-          <StackPanel>
+            </div>
             <FloorPlanRecognition />
-          </StackPanel>
+          </RoomEntry>
 
           {/* ========================= FINAL CTA ========================= */}
-          <StackPanel>
+          <RoomEntry room="garden" number={10}>
             <HangingCta trust={CTA_TRUST} freeCredits={FREE_SIGNUP_CREDITS} />
-          </StackPanel>
+          </RoomEntry>
 
-          {/* ========================= BLOG TEASER ========================= */}
-          <StackPanel>
+          {/* ========================= BLOG TEASER + NEWSLETTER ========================= */}
+          <RoomEntry room="study" number={11}>
             <BlogTeaser />
-          </StackPanel>
-
-          {/* ========================= NEWSLETTER ========================= */}
-          <StackPanel>
             <NewsletterBand />
-          </StackPanel>
-        </StackPanelGroup>
+          </RoomEntry>
+        </div>
 
       </main>
 

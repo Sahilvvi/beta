@@ -16,6 +16,7 @@ import { MaintenanceBanner } from "@/components/shared/MaintenanceBanner";
 
 // Pages — single-page B2B landing + product demo + app
 import Home from "./pages/Home";
+const HomeClassic = lazyPage(() => import("./pages/HomeClassic"));
 import Blog from "./pages/Blog";
 import NotFound from "./pages/NotFound";
 import Contact from "./pages/Contact";
@@ -115,6 +116,7 @@ function AppRoutes() {
       <Routes location={location} key={location.pathname}>
         {/* Home - AI Measurement + Mantha AI */}
         <Route path="/" element={<PageTransition><Home /></PageTransition>} />
+        <Route path="/classic" element={<PageTransition><HomeClassic /></PageTransition>} />
         <Route path="/r/:slug" element={<Share />} />
 
         {/* Contact */}

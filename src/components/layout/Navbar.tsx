@@ -1,8 +1,9 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Logo } from '@/components/brand/Logo';
 import { Menu, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 
 import { PHASE1_PLAN, pence } from '@/lib/billing';
 import { cn } from '@/lib/utils';
@@ -12,6 +13,7 @@ const INTRO = pence(PHASE1_PLAN.introPrice ?? 0.69);
 
 const navLinks = [
   { href: '/#how-it-works', label: 'How it works' },
+  { href: '/#styles', label: 'Styles' },
   { href: '/#comparison', label: 'Compare' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/blog', label: 'Blog' },
@@ -34,6 +36,45 @@ export function Navbar({ floating = false }: { floating?: boolean }) {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Tucks away while you scroll down a long page, comes straight back on any scroll up.
+  const [tucked, setTucked] = useState(false);
+  const lastY = useRef(0);
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY;
+      const delta = y - lastY.current;
+      if (Math.abs(delta) > 6) setTucked(delta > 0 && y > 480);
+      lastY.current = y;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Scroll-spy (homepage only): which in-page section is under the middle of the screen.
+  const { pathname } = useLocation();
+  const [activeId, setActiveId] = useState<string | null>(null);
+  useEffect(() => {
+    if (pathname !== '/') { setActiveId(null); return; }
+    const ids = navLinks.filter((l) => l.href.startsWith('/#')).map((l) => l.href.slice(2));
+    const seen = new Map<string, boolean>();
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => seen.set(e.target.id, e.isIntersecting));
+        setActiveId(ids.find((id) => seen.get(id)) ?? null);
+      },
+      { rootMargin: '-45% 0px -50% 0px' },
+    );
+    // sections mount lazily (and after the intro), so look for them for a while
+    const found = new Set<string>();
+    const scan = () => ids.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el && !found.has(id)) { found.add(id); io.observe(el); }
+    });
+    scan();
+    const timer = window.setInterval(scan, 1500);
+    return () => { io.disconnect(); window.clearInterval(timer); };
+  }, [pathname]);
+
   const raised = floating || scrolled || mobileOpen;
   // Before the page scrolls, the pill is transparent and sits directly on the
   // dark hero — the usual dark nav-link/logo colours lose contrast there, so
@@ -42,7 +83,12 @@ export function Navbar({ floating = false }: { floating?: boolean }) {
   const light = !raised;
 
   return (
-    <nav className="fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-4">
+    <nav
+      className={cn(
+        'fixed inset-x-0 top-0 z-50 px-3 pt-3 transition-transform duration-500 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)] sm:px-4',
+        tucked && !mobileOpen && '-translate-y-[120%]',
+      )}
+    >
       <div
         className={cn(
           'mx-auto rounded-[22px] border px-4 transition-all duration-500 sm:px-6',
@@ -55,19 +101,32 @@ export function Navbar({ floating = false }: { floating?: boolean }) {
           <Logo inverted={light} />
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-8">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                to={link.href}
-                className={cn(
-                  'text-sm font-medium transition-colors',
-                  light ? 'text-white/85 hover:text-white' : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {link.label}
-              </Link>
-            ))}
+          <div className="hidden md:flex items-center gap-1 lg:gap-2">
+            {navLinks.map((link) => {
+              const active = activeId !== null && link.href === `/#${activeId}`;
+              return (
+                <Link
+                  key={link.href}
+                  to={link.href}
+                  className={cn(
+                    'relative whitespace-nowrap rounded-full px-2 py-1.5 text-[13px] font-medium transition-colors lg:px-3 lg:text-sm',
+                    // Blog/Contact also live in the footer; drop them where the pill gets tight
+                    (link.href === '/blog' || link.href === '/contact') && 'hidden xl:inline-block',
+                    light ? 'text-white/85 hover:text-white' : 'text-muted-foreground hover:text-foreground',
+                    active && !light && 'text-primary hover:text-primary',
+                  )}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="nav-active-pill"
+                      className={cn('absolute inset-0 -z-[1] rounded-full', light ? 'bg-white/15' : 'bg-secondary')}
+                      transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                    />
+                  )}
+                  {link.label}
+                </Link>
+              );
+            })}
           </div>
 
           {/* Desktop CTAs */}
@@ -75,7 +134,7 @@ export function Navbar({ floating = false }: { floating?: boolean }) {
             <Link
               to={account.to}
               className={cn(
-                'text-sm font-medium transition-colors',
+                'whitespace-nowrap text-sm font-medium transition-colors',
                 light ? 'text-white/85 hover:text-white' : 'text-muted-foreground hover:text-foreground',
               )}
             >

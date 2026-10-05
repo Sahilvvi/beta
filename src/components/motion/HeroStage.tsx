@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight, Sparkles, ChevronsLeftRight } from 'lucide-react';
 import { Magnetic, Reveal, RevealWords, Stagger, staggerItem } from '@/components/premium/Motion';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, animate, motion, useMotionValue, useTransform } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { DEMO_ROOMS, DEMO_STYLES, type RoomItem, type StyleKey } from '@/lib/heroRooms';
 
@@ -227,18 +227,30 @@ export function HeroStage({ onStageBoxMount }: { onStageBoxMount?: (el: HTMLDivE
               className="relative aspect-[1024/765] overflow-hidden rounded-[20px]"
               onClick={() => setActiveItem(null)}
             >
+              {/* A redesign is revealed by Mantha's scan line sweeping down over the
+                  old photo; going back to the plain room (or switching rooms) crossfades. */}
               <AnimatePresence initial={false}>
                 <motion.img
                   key={stageKey}
                   src={stageImage.image}
                   alt={stageImage.alt}
-                  initial={{ opacity: 0, scale: 1.06 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+                  initial={styleKey ? { clipPath: 'inset(0% 0% 100% 0%)', scale: 1.04 } : { opacity: 0, scale: 1.06 }}
+                  animate={styleKey ? { clipPath: 'inset(0% 0% 0% 0%)', scale: 1 } : { opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, transition: { delay: styleKey ? 0.9 : 0, duration: 0.3 } }}
+                  transition={{ duration: styleKey ? 0.95 : 0.65, ease: [0.65, 0, 0.35, 1] }}
                   className="absolute inset-0 h-full w-full object-cover"
                 />
               </AnimatePresence>
+              {styleKey && (
+                <motion.div
+                  key={`scan-${stageKey}`}
+                  aria-hidden
+                  initial={{ top: '0%', opacity: 1 }}
+                  animate={{ top: '100%', opacity: [1, 1, 0] }}
+                  transition={{ duration: 0.95, ease: [0.65, 0, 0.35, 1] }}
+                  className="pointer-events-none absolute inset-x-0 z-[2] h-[3px] -translate-y-1/2 bg-[#8FE3D4] shadow-[0_0_24px_6px_rgba(143,227,212,0.65),0_0_80px_20px_rgba(0,160,140,0.35)]"
+                />
+              )}
               {/* Light sweep that plays once per room/style change — a small
                   "reveal" flourish so the swap reads as a redesign, not a
                   blunt image replace. */}
@@ -284,6 +296,12 @@ export function HeroStage({ onStageBoxMount }: { onStageBoxMount?: (el: HTMLDivE
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              {/* Once a redesign is showing (and the AI beat is over), the
+                  original photo comes back as a draggable "before" layer. */}
+              {styleKey && !generating && (
+                <CompareDivider key={stageKey} before={room.image} beforeAlt={room.alt} styleLabel={styleKey} />
+              )}
 
               {!styleKey && room.items.map((item, i) => (
                 <button
@@ -334,7 +352,7 @@ export function HeroStage({ onStageBoxMount }: { onStageBoxMount?: (el: HTMLDivE
             <figcaption className="mt-3 flex justify-between gap-3 font-label text-[12px] tracking-[0.04em] text-white/60">
               <span>
                 {styleKey
-                  ? `● ${styleKey} redesign — tap another style to compare`
+                  ? `● Drag the handle to compare — or tap another style`
                   : '● Tap a dot to see what it is and what it costs'}
               </span>
               <span>{styleKey ? `${room.label} · ${styleKey}` : `${room.label} · ${room.items.length} items tagged`}</span>
@@ -378,5 +396,53 @@ export function HeroStage({ onStageBoxMount }: { onStageBoxMount?: (el: HTMLDivE
         </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * Before/after divider over a redesign: the original photo is clipped to the
+ * left of a draggable handle. It arrives with one short sweep (100% → 50%,
+ * then a small nudge) so it's obvious it can be dragged, and stays put after.
+ */
+function CompareDivider({ before, beforeAlt, styleLabel }: { before: string; beforeAlt: string; styleLabel: string }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const pos = useMotionValue(100); // % of width showing the original
+  const clip = useTransform(pos, (v) => `inset(0 ${100 - v}% 0 0)`);
+  const left = useTransform(pos, (v) => `${v}%`);
+  const dragging = useRef(false);
+
+  useEffect(() => {
+    // starts once the scan-line reveal (HeroStage, ~0.95s) has finished
+    const controls = animate(pos, [100, 50, 60, 50], { duration: 1.5, delay: 1.05, ease: [0.22, 1, 0.36, 1], times: [0, 0.55, 0.78, 1] });
+    return () => controls.stop();
+  }, [pos]);
+
+  const setFromEvent = (e: ReactPointerEvent) => {
+    const r = boxRef.current?.getBoundingClientRect();
+    if (!r) return;
+    pos.stop();
+    pos.set(Math.min(98, Math.max(2, ((e.clientX - r.left) / r.width) * 100)));
+  };
+
+  return (
+    <div
+      ref={boxRef}
+      className="absolute inset-0 z-[3] cursor-ew-resize touch-pan-y select-none"
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => { dragging.current = true; e.currentTarget.setPointerCapture(e.pointerId); setFromEvent(e); }}
+      onPointerMove={(e) => { if (dragging.current) setFromEvent(e); }}
+      onPointerUp={() => { dragging.current = false; }}
+      onPointerCancel={() => { dragging.current = false; }}
+    >
+      <motion.img src={before} alt={beforeAlt} draggable={false} style={{ clipPath: clip }} className="absolute inset-0 h-full w-full object-cover" />
+      <motion.div style={{ left }} className="pointer-events-none absolute inset-y-0 w-0">
+        <span className="absolute inset-y-0 -left-px w-[2px] bg-white shadow-[0_0_14px_rgba(0,0,0,0.35)]" />
+        <span className="absolute left-0 top-1/2 grid h-10 w-10 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white text-[#00594E] shadow-[0_6px_20px_rgba(0,0,0,0.35)]">
+          <ChevronsLeftRight className="h-4 w-4" />
+        </span>
+      </motion.div>
+      <span className="pointer-events-none absolute left-3 top-3 rounded-full bg-black/45 px-2.5 py-1 font-label text-[10.5px] font-bold uppercase tracking-[0.14em] text-white backdrop-blur-md">Before</span>
+      <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-[#00A08C]/90 px-2.5 py-1 font-label text-[10.5px] font-bold uppercase tracking-[0.14em] text-white backdrop-blur-md">{styleLabel}</span>
+    </div>
   );
 }
