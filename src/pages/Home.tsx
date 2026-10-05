@@ -23,7 +23,6 @@ import { Testimonials } from '@/components/premium/Testimonials';
 import { BlogTeaser } from '@/components/premium/BlogTeaser';
 import { CursorAura, ScrollProgress } from '@/components/motion/primitives';
 import type { TrustItem } from '@/components/motion/hooks';
-import { WalkPanel, WalkGroup } from '@/components/motion/WalkPanels';
 import { TinyPlanet } from '@/components/immersive/TinyPlanet';
 import { HeroStage } from '@/components/motion/HeroStage';
 import { HowItWorks } from '@/components/motion/HowItWorks';
@@ -32,8 +31,8 @@ import { NewsletterBand } from '@/components/motion/NewsletterBand';
 import { FREE_SIGNUP_CREDITS } from '@/lib/generation';
 import { PHASE1_PLAN, money, pence } from '@/lib/billing';
 import { organizationSchema, softwareApplicationSchema, faqPageSchema } from '@/lib/schema';
-import { useSmoothScroll, smoothScrollTo } from '@/components/motion/useSmoothScroll';
-import { TourBackdrop, RoomEntry, RoomMap } from '@/components/motion/HouseTour';
+import { useSmoothScroll } from '@/components/motion/useSmoothScroll';
+import { TourBackdrop, RoomEntry } from '@/components/motion/HouseTour';
 
 /* ---------------------------------------------------------------- *
  *  Homepage — a motion-led layout: 3D hero, a pinned "how it works"
@@ -98,6 +97,10 @@ let introPlayedThisSession = false;
 // returning visitor and skips straight past the intro.
 const isAutomatedBrowser = typeof navigator !== 'undefined' && navigator.webdriver === true;
 
+// The intro video is switched off for now: the page opens on the front door of the
+// house instead (see the "entrance" room below). Flip back to true to bring it back.
+const SHOW_INTRO_VIDEO = false;
+
 export default function Home() {
   // Page content stays invisible until the intro's video starts shrinking,
   // so it "arrives" alongside the video settling into the hero rather than
@@ -107,7 +110,7 @@ export default function Home() {
   // `isAutomatedBrowser` above).
   // Dev-only: /?nointro jumps straight to the page while working on sections below the hero.
   const devSkipIntro = import.meta.env.DEV && new URLSearchParams(window.location.search).has('nointro');
-  const skipIntro = introPlayedThisSession || isAutomatedBrowser || devSkipIntro;
+  const skipIntro = !SHOW_INTRO_VIDEO || introPlayedThisSession || isAutomatedBrowser || devSkipIntro;
   const [pageVisible, setPageVisible] = useState(skipIntro);
   const [introDone, setIntroDone] = useState(skipIntro);
   // The hero's own room photo, mounted underneath the intro the whole time
@@ -153,30 +156,18 @@ export default function Home() {
         <ScrollProgress />
         <CursorAura />
         <Navbar />
-        <RoomMap onJump={(y) => smoothScrollTo(y)} />
 
         <main className="relative z-10 overflow-clip">
 
         {/*
-          Walk-through panels: the landing page's scroll mechanic. Each
-          section opens like a doorway as it arrives, its headings and photos
-          move at different depths while you're in it, and it moves past you
-          as you walk on to the next one. See WalkPanels.tsx.
-
-          Order matches the design prototype (Hero → How it works → offer
-          strip → Mantha/templates → Testimonials → About → Comparison →
-          Pricing → FAQ) exactly — every prototype section, in the
-          prototype's own sequence, nothing from outside that list allowed
-          to interrupt it. Everything below FAQ (Room Anatomy, Roadmap, AI
-          Measurement, Floor Plan Recognition, Who it's for, final CTA,
-          Newsletter) has no equivalent in the prototype — kept for now, to
-          be arranged later.
+          The house tour: every section, in the original order, sits behind its
+          own door — scroll to walk up to it, it opens, and the section fills
+          the screen. See HouseTour.tsx.
         */}
-        <WalkGroup className="px-3 sm:px-4">
-          <WalkPanel>
-            <HeroStage onStageBoxMount={(el) => { heroStageBoxRef.current = el; }} />
-          </WalkPanel>
-        </WalkGroup>
+        {/* The front door: the page opens outside the house, and scrolling opens the door onto the hero. */}
+        <RoomEntry room="entrance" tone="bg-[#00231D]" className="justify-start bg-[#00231D] px-3 pt-3 sm:px-4">
+          <HeroStage onStageBoxMount={(el) => { heroStageBoxRef.current = el; }} />
+        </RoomEntry>
 
         {/*
           The portal (the reference site's signature move): a glowing circle

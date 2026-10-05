@@ -1,29 +1,22 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { smoothScrollTo } from './useSmoothScroll';
 
 /**
- * House tour — the homepage is walked like a home. Every section lives behind
- * a door in its own room:
+ * House tour — after the hero, every section sits behind its own door:
  *
- *   1. you're standing in the room (full-screen photo), its door shut, and its name appears;
- *   2. scrolling walks you towards the door — and the door swings open as you
- *      approach, showing the next room through it;
- *   3. you step through: a white circle opens from the doorway and grows until
- *      it fills the screen — and inside it is the section;
- *   4. read the section, and as it scrolls away the next room is waiting.
+ *   1. a room comes into view, door shut, with the section's name over it;
+ *   2. scrolling walks you up to the door, and it swings open on its hinges —
+ *      and through the doorway is the section itself, a little further off;
+ *   3. you walk on through: the doorway grows past the edges of the screen and
+ *      the section comes up to full size, filling it;
+ *   4. read the section, and as it scrolls away the next door is waiting.
  *
- * <TourBackdrop> is the fixed camera (the room photo, the door and the walk), and
- * <RoomEntry> wraps each section: a walk-in stretch, then the section itself,
- * which holds still (sticky) while the circle opens over it.
- *
- * The door is 2.5D, built from two photos of the same room — door open and door
- * shut. The open photo is the base. Over it sits the shut photo with a hole
- * where the doorway is, and the door leaves themselves, cut from the shut photo
- * and swung on their hinges in CSS 3D. Anything standing in front of the door
- * (a lamp, a vase, the end of a bed) is lifted out of the photos and laid on
- * top, so the door swings behind it. Once the door is open the shut photo fades
- * away, leaving the real open-door photo for the step through.
+ * The door is 2.5D, built from a door-shut photo of the room: the photo is the
+ * back layer, the section shows through the doorway (clipped to it), and the
+ * door leaves — cut from the same photo — swing in CSS 3D on a layer above,
+ * with anything standing in front of the door (a lamp, a vase, the end of a
+ * bed) lifted out of the photo and laid on top, so the door swings behind it.
  */
 
 /** A rectangle in a room photo, as fractions of its width/height: [left, top, right, bottom]. */
@@ -45,6 +38,12 @@ export interface Room {
   /** The same photo with the door shut — the leaves are cut from this and swung open. */
   closed: string;
   leaves: Leaf[];
+  /** Big title over the door (defaults to `caption`), the small line above it, and the hint below it. */
+  title?: string;
+  kicker?: string;
+  hint?: string;
+  /** Width / height of the photo, if it isn't the house set's 2752 × 1536. */
+  aspect?: number;
   /** Which way the door opens: away from you into the next room (default), or towards you. */
   swing?: 'in' | 'out';
   /**
@@ -62,6 +61,10 @@ const R = (box: Box): Leaf => ({ box, hinge: 'right' });
 // teal + brass accents, afternoon light, eye-level one-point view) so the walk reads as one home.
 // Each room also has a door-shut edit of the same photo; leaf boxes were measured on those.
 export const ROOMS = {
+  // the front of the house: where the page opens, before the hero
+  entrance: { key: 'entrance', name: 'The Front Door', caption: 'Home', title: 'Think Decor', kicker: 'Welcome home', hint: 'Scroll to enter',
+    image: '/assets/house/entrance-closed.jpg', closed: '/assets/house/entrance-closed.jpg', aspect: 2048 / 1152,
+    leaves: [L([0.4437, 0.3582, 0.5018, 0.727]), R([0.5018, 0.3582, 0.5597, 0.727])] },
   living: { key: 'living', name: 'The Living Room', caption: 'Welcome in', image: '/assets/house/living.jpg', closed: '/assets/house/living-closed.jpg',
     leaves: [L([0.425, 0.25, 0.504, 0.70]), R([0.504, 0.25, 0.581, 0.70])], swing: 'out', front: [[0.4, 0.675, 0.62, 0.78]] },
   hallway: { key: 'hallway', name: 'The Hallway', caption: 'How it works', image: '/assets/house/hallway.jpg', closed: '/assets/house/hallway-closed.jpg',
@@ -77,12 +80,12 @@ export const ROOMS = {
     leaves: [L([0.374, 0.185, 0.5015, 0.558]), R([0.5015, 0.185, 0.6285, 0.558])],
     front: [[0.43, 0.15, 0.57, 0.34], [0.44, 0.34, 0.56, 0.6], [0.36, 0.52, 0.65, 0.6]] },
   snug: { key: 'snug', name: 'The Snug', caption: 'Pricing', image: '/assets/house/snug.jpg', closed: '/assets/house/snug-closed.jpg',
-    leaves: [L([0.353, 0.284, 0.485, 0.749])], front: [[0.47, 0.55, 0.53, 0.77]] },
-  reading: { key: 'reading', name: 'The Reading Nook', caption: 'Questions', image: '/assets/house/reading.jpg', closed: '/assets/house/reading-closed.jpg',
+    leaves: [L([0.353, 0.284, 0.485, 0.749])] },
+  reading: { key: 'reading', name: 'The Reading Nook', caption: 'Questions & answers', image: '/assets/house/reading.jpg', closed: '/assets/house/reading-closed.jpg',
     leaves: [L([0.4575, 0.193, 0.645, 0.771])] },
-  loft: { key: 'loft', name: 'The Loft', caption: 'Coming soon', image: '/assets/house/loft.jpg', closed: '/assets/house/loft-closed-1k.jpg',
+  loft: { key: 'loft', name: 'The Loft', caption: 'Measure & plan', image: '/assets/house/loft.jpg', closed: '/assets/house/loft-closed-1k.jpg',
     leaves: [L([0.419, 0.302, 0.5, 0.739]), R([0.5, 0.302, 0.581, 0.739])] },
-  garden: { key: 'garden', name: 'The Garden Room', caption: 'Your next room', image: '/assets/house/garden.jpg', closed: '/assets/house/garden-closed.jpg',
+  garden: { key: 'garden', name: 'The Garden Room', caption: 'Start your room', image: '/assets/house/garden.jpg', closed: '/assets/house/garden-closed.jpg',
     leaves: [L([0.425, 0.336, 0.504, 0.728]), R([0.504, 0.336, 0.581, 0.728])], swing: 'out', front: [[0.49, 0.68, 0.555, 0.79]] },
   study: { key: 'study', name: 'The Study', caption: 'Stories & ideas', image: '/assets/house/study.jpg', closed: '/assets/house/study-closed-1k.jpg',
     leaves: [R([0.506, 0.168, 0.669, 0.81])] },
@@ -104,6 +107,8 @@ function doorPoint(room: Room): [number, number] {
 /* ---------------- what's in front of each door ---------------- */
 
 type Overlay = { box: Box; url: string };
+/** What stands in front of a door: lifted-out pieces to lay on top, and per-leaf masks so the leaves don't carry them. */
+type Front = { overlays: Overlay[]; leafMasks: string[] };
 
 const loadImage = (src: string) => new Promise<HTMLImageElement>((res, rej) => {
   const i = new Image();
@@ -112,79 +117,125 @@ const loadImage = (src: string) => new Promise<HTMLImageElement>((res, rej) => {
   i.src = src;
 });
 
-/** Lifts out whatever is in front of the door: pixels inside `front` boxes that match in both photos. */
-async function frontOverlays(room: Room): Promise<Overlay[]> {
-  if (!room.front?.length) return [];
+/** Square erode (keep = 0) or dilate (keep = 1) of a 0/1 bitmap, radius r, as two 1D passes. */
+function morph(src: Uint8Array, w: number, h: number, r: number, keep: 0 | 1) {
+  const pass = (a: Uint8Array, horizontal: boolean) => {
+    const out = new Uint8Array(a.length);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let v = 1 - keep;
+      for (let k = -r; k <= r && v !== keep; k++) {
+        const xx = horizontal ? x + k : x, yy = horizontal ? y : y + k;
+        const inside = xx >= 0 && yy >= 0 && xx < w && yy < h;
+        if ((inside ? a[yy * w + xx] : 0) === keep) v = keep;
+      }
+      out[y * w + x] = v;
+    }
+    return out;
+  };
+  return pass(pass(src, true), false);
+}
+
+const overlaps = (a: Box, b: Box) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
+
+/**
+ * Lifts out whatever is in front of the door: pixels inside `front` boxes that
+ * match in the open and shut photos. Works on the shut photo (the one on screen).
+ */
+async function frontOf(room: Room): Promise<Front> {
+  if (!room.front?.length) return { overlays: [], leafMasks: room.leaves.map(() => '') };
   const [open, shut] = await Promise.all([loadImage(room.image), loadImage(room.closed)]);
-  // work at the open photo's full size; the shut one may be a smaller edit
-  const W = open.naturalWidth, H = open.naturalHeight;
-  const sx = shut.naturalWidth / W, sy = shut.naturalHeight / H;
+  const W = shut.naturalWidth, H = shut.naturalHeight;
   const canvas = (w: number, h: number) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-  return room.front.map((b) => {
+  const rect = (b: Box) => {
     const x = Math.round(b[0] * W), y = Math.round(b[1] * H);
-    const w = Math.max(1, Math.round((b[2] - b[0]) * W)), h = Math.max(1, Math.round((b[3] - b[1]) * H));
+    return [x, y, Math.max(1, Math.round(b[2] * W) - x), Math.max(1, Math.round(b[3] * H) - y)] as const;
+  };
+
+  // one full-size map: opaque where something stands in front of the door
+  const same = canvas(W, H);
+  const sctx = same.getContext('2d')!;
+  for (const b of room.front) {
+    const [x, y, w, h] = rect(b);
     const a = canvas(w, h).getContext('2d', { willReadFrequently: true })!;
     const c = canvas(w, h).getContext('2d', { willReadFrequently: true })!;
-    a.drawImage(open, x, y, w, h, 0, 0, w, h);
-    c.drawImage(shut, x * sx, y * sy, w * sx, h * sy, 0, 0, w, h);
+    a.drawImage(open, (x / W) * open.naturalWidth, (y / H) * open.naturalHeight, (w / W) * open.naturalWidth, (h / H) * open.naturalHeight, 0, 0, w, h);
+    c.drawImage(shut, x, y, w, h, 0, 0, w, h);
     const da = a.getImageData(0, 0, w, h).data, dc = c.getImageData(0, 0, w, h).data;
-    const mask = new ImageData(w, h);
-    for (let i = 0; i < da.length; i += 4) {
-      const diff = Math.abs(da[i] - dc[i]) + Math.abs(da[i + 1] - dc[i + 1]) + Math.abs(da[i + 2] - dc[i + 2]);
-      mask.data[i + 3] = diff < 48 ? 255 : 0;
+    let bits = new Uint8Array(w * h);
+    for (let i = 0; i < bits.length; i++) {
+      const j = i * 4;
+      bits[i] = Math.abs(da[j] - dc[j]) + Math.abs(da[j + 1] - dc[j + 1]) + Math.abs(da[j + 2] - dc[j + 2]) < 72 ? 1 : 0;
     }
+    // drop stray specks (a patch of door that happens to match) and keep solid objects:
+    // shrink the match by a few pixels, then grow it back
+    const r = Math.max(2, Math.round(W / 700));
+    bits = morph(morph(bits, w, h, r, 0), w, h, r, 1);
+    // …then fill the small holes inside what's left, so objects come out solid
+    bits = morph(morph(bits, w, h, r * 4, 1), w, h, r * 4, 0);
+    const mask = new ImageData(w, h);
+    for (let i = 0; i < bits.length; i++) mask.data[i * 4 + 3] = bits[i] ? 255 : 0;
     const m = canvas(w, h);
     m.getContext('2d')!.putImageData(mask, 0, 0);
+    sctx.filter = 'blur(1.2px)'; // soften the cut so its edge doesn't fizz
+    sctx.drawImage(m, x, y);
+    sctx.filter = 'none';
+  }
+
+  const overlays = room.front.map((b) => {
+    const [x, y, w, h] = rect(b);
     const out = canvas(w, h);
     const ctx = out.getContext('2d')!;
-    ctx.drawImage(open, x, y, w, h, 0, 0, w, h);
+    ctx.drawImage(shut, x, y, w, h, 0, 0, w, h);
     ctx.globalCompositeOperation = 'destination-in';
-    // soften the cut so its edge doesn't fizz; then fade the box's own border so it never shows
-    ctx.filter = 'blur(1.2px)';
-    ctx.drawImage(m, 0, 0);
-    ctx.filter = 'none';
+    ctx.drawImage(same, x, y, w, h, 0, 0, w, h);
     return { box: b, url: out.toDataURL('image/png') };
   });
+
+  const leafMasks = room.leaves.map((l) => {
+    if (!room.front!.some((f) => overlaps(f, l.box))) return '';
+    const [x, y, w, h] = rect(l.box);
+    const out = canvas(w, h);
+    const ctx = out.getContext('2d')!;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.drawImage(same, x, y, w, h, 0, 0, w, h);
+    return out.toDataURL('image/png');
+  });
+  return { overlays, leafMasks };
 }
 
 /** All generated room photos share one aspect ratio (2752 × 1536). */
 const IMAGE_ASPECT = 2752 / 1536;
 
-/** Scroll lengths, in viewport heights: the walk to the door, and the circle opening. */
-const WALK_VH = 1.25;
-const OPEN_VH = 0.75;
+/** Scroll lengths, in viewport heights: the walk up to the door (it opens on the way), and the step through. */
+const WALK_VH = 1.15;
+const OPEN_VH = 0.9;
 
 /** Along the walk (0–1): when the door starts and finishes opening. */
-const DOOR_FROM = 0.16;
-const DOOR_TO = 0.68;
+const DOOR_FROM = 0.14;
+const DOOR_TO = 0.72;
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const inOut = (x: number) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
-const out3 = (x: number) => 1 - Math.pow(1 - x, 3);
-const in2 = (x: number) => x * x;
 const pct = (x: number) => `${(x * 100).toFixed(3)}%`;
 
 /* ---------------- registry: rooms, in page order ---------------- */
 
-interface Entry { el: HTMLElement; section: HTMLElement; title: HTMLElement; room: RoomKey }
+interface Entry { el: HTMLElement; section: HTMLElement; inner: HTMLElement; veil: HTMLElement; room: RoomKey }
 let entries: Entry[] = [];
-const listeners = new Set<() => void>();
-const notify = () => listeners.forEach((l) => l());
 
 /**
  * Where a room's photo — and its doorway — sit on screen. The photo is
  * cover-fitted, so on a narrow (portrait) screen its sides are cropped and a
  * doorway near the edge could fall off-screen — the photo is then slid
  * sideways (within its own overflow) so the door stays comfortably in view.
- *
- * Returns the photo's box on screen (`ox`, `oy`, `w`, `h`) and where the
- * doorway lands (`sx`, `sy` — also the zoom origin).
  */
 function photoOnScreen(room: Room, W: number, H: number) {
-  const R = W / H;
+  const R = W / H, A = room.aspect ?? IMAGE_ASPECT;
   let w = W, h = H, oy = 0;
-  if (R < IMAGE_ASPECT) { h = H; w = H * IMAGE_ASPECT; }
-  else { w = W; h = W / IMAGE_ASPECT; oy = (H - h) / 2; }
+  if (R < A) { h = H; w = H * A; }
+  else { w = W; h = W / A; oy = (H - h) / 2; }
   const [dx, dy] = doorPoint(room);
   let ox = (W - w) / 2;
   if (w > W + 1) {
@@ -194,23 +245,51 @@ function photoOnScreen(room: Room, W: number, H: number) {
   return { ox, oy, w, h, sx: ox + dx * w, sy: oy + dy * h };
 }
 
+/**
+ * The camera for one room at one moment. You walk up to the door (framing it
+ * at about half the screen width) while it swings open, then walk through it:
+ * the zoom carries on until the doorway is bigger than the screen.
+ *
+ * `door` is the doorway's rectangle on screen; `k` is how big the section
+ * behind it is drawn — it's further away than the door, so it grows more
+ * slowly, and reaches full size exactly as the doorway fills the screen.
+ */
+function camera(room: Room, W: number, H: number, walk: number, open: number) {
+  const p = photoOnScreen(room, W, H);
+  const d = doorBox(room);
+  const cx = p.sx, cy = p.sy;
+  const X0 = p.ox + d[0] * p.w, X1 = p.ox + d[2] * p.w, Y0 = p.oy + d[1] * p.h, Y1 = p.oy + d[3] * p.h;
+  const atDoor = Math.min(2, Math.max(1.06, (W * 0.5) / (X1 - X0)));
+  const cover = 1.03 * Math.max(cx / (cx - X0), (W - cx) / (X1 - cx), cy / (cy - Y0), (H - cy) / (Y1 - cy), atDoor * 1.2);
+  const approach = inOut(clamp01(walk / DOOR_TO));
+  // the step through, in scroll distance: the end of the walk plus the whole open stretch
+  const through = clamp01(((walk - DOOR_TO) * WALK_VH + open * OPEN_VH) / ((1 - DOOR_TO) * WALK_VH + OPEN_VH));
+  const S = (1.03 + (atDoor - 1.03) * approach) * Math.pow(cover / atDoor, inOut(through));
+  const bob = Math.sin(walk * Math.PI * 7) * 2.5 * (1 - through) * (walk > 0 ? 1 : 0);
+  const at = (x: number, y: number) => [cx + (x - cx) * S, cy + (y - cy) * S + bob] as const;
+  const [a0, b0] = at(X0, Y0), [a1, b1] = at(X1, Y1);
+  return { p, cx, cy: cy + bob, S, bob, through, door: [a0, b0, a1, b1] as Box, k: through >= 1 ? 1 : Math.pow(S / cover, 0.75) };
+}
+
 interface TourState {
   index: number;
   room: RoomKey | null;
-  /** 0 → 1 while walking from the middle of the room to its door (the door opens on the way). */
+  /** How far the room's block has scrolled past the top of the screen (px; negative = still arriving). */
+  top: number;
+  /** 0 → 1 while walking up to the door (the door opens on the way). */
   walk: number;
-  /** 0 → 1 while the circle opens over the section. */
+  /** 0 → 1 while stepping through it. */
   open: number;
 }
 
-/** Which room you're in (the last one whose walk-in has come on screen) and how far along you are. */
+/** Which room you're in (the last one whose block has come on screen) and how far along you are. */
 function readTour(H: number): TourState {
-  let s: TourState = { index: -1, room: null, walk: 0, open: 0 };
+  let s: TourState = { index: -1, room: null, top: 0, walk: 0, open: 0 };
   entries.forEach((e, i) => {
     const top = e.el.getBoundingClientRect().top;
     if (top >= H) return;
     const walkLen = WALK_VH * H, openLen = OPEN_VH * H;
-    s = { index: i, room: e.room, walk: clamp01(-top / walkLen), open: clamp01((-top - walkLen) / openLen) };
+    s = { index: i, room: e.room, top, walk: clamp01(-top / walkLen), open: clamp01((-top - walkLen) / openLen) };
   });
   return s;
 }
@@ -218,26 +297,22 @@ function readTour(H: number): TourState {
 /* ---------------- the door ---------------- */
 
 /**
- * One room's door, laid over its open-door photo (in the photo's own
- * coordinates, so percentages are fractions of the photo). Hidden unless it's
- * the room you're in; TourBackdrop drives it through `data-*` hooks.
+ * One room's door leaves (and anything standing in front of them), in the
+ * photo's own coordinates. This sits above the section, which shows through
+ * the doorway behind it. Hidden unless it's the room you're in.
  */
 function DoorRig({ room }: { room: Room }) {
-  const [overlays, setOverlays] = useState<Overlay[]>([]);
+  const [front, setFront] = useState<Front>({ overlays: [], leafMasks: [] });
   useEffect(() => {
     let live = true;
     // after first paint, so lifting the furniture out never holds up the page
-    const id = window.setTimeout(() => { frontOverlays(room).then((o) => live && setOverlays(o)).catch(() => {}); }, 400);
+    const id = window.setTimeout(() => { frontOf(room).then((f) => live && setFront(f)).catch(() => {}); }, 400);
     return () => { live = false; window.clearTimeout(id); };
   }, [room]);
 
   const d = doorBox(room);
-  // the shut photo with a doorway-shaped hole in it
-  const hole = `polygon(evenodd, 0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, ${pct(d[0])} ${pct(d[1])}, ${pct(d[2])} ${pct(d[1])}, ${pct(d[2])} ${pct(d[3])}, ${pct(d[0])} ${pct(d[3])}, ${pct(d[0])} ${pct(d[1])})`;
-
   return (
     <div data-rig={room.key} className="absolute inset-0" style={{ display: 'none' }}>
-      <div data-wall className="absolute inset-0" style={{ backgroundImage: `url(${room.closed})`, backgroundSize: '100% 100%', clipPath: hole }} />
       {/* the leaves swing in a shared 3D space, seen from the doorway's middle */}
       <div data-stage className="absolute inset-0" style={{ perspectiveOrigin: `${pct((d[0] + d[2]) / 2)} ${pct((d[1] + d[3]) / 2)}` }}>
         {room.leaves.map((l, i) => {
@@ -254,30 +329,28 @@ function DoorRig({ room }: { room: Room }) {
                 backgroundImage: `url(${room.closed})`,
                 backgroundSize: `${pct(1 / bw)} ${pct(1 / bh)}`,
                 backgroundPosition: `${pct(x0 / (1 - bw))} ${pct(y0 / (1 - bh))}`,
+                ...(front.leafMasks[i] ? { maskImage: `url(${front.leafMasks[i]})`, WebkitMaskImage: `url(${front.leafMasks[i]})`, maskSize: '100% 100%', WebkitMaskSize: '100% 100%' } : {}),
               }}
             >
               {/* turning out of the light: the leaf darkens as it swings, deepest at the free edge */}
               <div
-                data-shade
                 className="absolute inset-0 opacity-0"
-                style={{ background: `linear-gradient(${l.hinge === 'left' ? '90deg' : '270deg'}, rgba(20,16,10,0.25), rgba(12,10,6,0.6))` }}
+                style={{ background: `linear-gradient(${l.hinge === 'left' ? '90deg' : '270deg'}, rgba(20,16,10,0.2), rgba(12,10,6,0.55))` }}
               />
               {/* the leaf's thickness: a sliver of edge along the free side */}
               <div
-                data-edge
                 className={cn('absolute inset-y-0 w-[3px] opacity-0', l.hinge === 'left' ? 'right-0' : 'left-0')}
-                style={{ background: 'linear-gradient(180deg, rgba(255,250,240,0.7), rgba(200,190,170,0.5))' }}
+                style={{ background: 'linear-gradient(180deg, rgba(255,250,240,0.75), rgba(200,190,170,0.55))' }}
               />
             </div>
           );
         })}
       </div>
-      {overlays.map((o, i) => (
+      {front.overlays.map((o, i) => (
         <img
           key={i}
           alt=""
           src={o.url}
-          data-front
           className="absolute"
           style={{ left: pct(o.box[0]), top: pct(o.box[1]), width: pct(o.box[2] - o.box[0]), height: pct(o.box[3] - o.box[1]) }}
         />
@@ -288,132 +361,129 @@ function DoorRig({ room }: { room: Room }) {
 
 /* ---------------- the camera ---------------- */
 
+/**
+ * Three fixed layers around the sections:
+ *   below — the room, door shut (the photo);
+ *   the section you're walking into, clipped to the doorway (it's in the page, see RoomEntry);
+ *   above — the door leaves swinging open, and anything standing in front of them.
+ * Both photo layers get the same camera transform, so the doorway lines up exactly.
+ */
 export function TourBackdrop() {
   const rootRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
   const plateRef = useRef<HTMLDivElement>(null);
-  const sharpRef = useRef<HTMLImageElement>(null);
-  const softRef = useRef<HTMLImageElement>(null);
-  const glowRef = useRef<HTMLDivElement>(null);
+  const photoRef = useRef<HTMLImageElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
+  const topLayerRef = useRef<HTMLDivElement>(null);
+  const topPlateRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
+  const kickerRef = useRef<HTMLParagraphElement>(null);
+  const nameRef = useRef<HTMLHeadingElement>(null);
+  const hintRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     // warm the cache so a room is never empty when you walk in
-    Object.values(ROOMS).forEach((r) => { new Image().src = r.image; new Image().src = r.closed; });
+    Object.values(ROOMS).forEach((r) => { new Image().src = r.closed; });
 
     let raf = 0;
-    let src = '';
+    let current: RoomKey | null = null;
     let rig: HTMLElement | null = null;
     let plateBox = '';
-    const t0 = performance.now();
 
-    const tick = (now: number) => {
+    const tick = () => {
       raf = requestAnimationFrame(tick);
-      const root = rootRef.current, layer = layerRef.current, plate = plateRef.current;
-      const sharp = sharpRef.current, soft = softRef.current, glow = glowRef.current;
-      if (!root || !layer || !plate || !sharp || !soft || !glow) return;
+      const root = rootRef.current, layer = layerRef.current, plate = plateRef.current, photo = photoRef.current;
+      const top = topRef.current, topLayer = topLayerRef.current, topPlate = topPlateRef.current;
+      const title = titleRef.current, kicker = kickerRef.current, name = nameRef.current, hint = hintRef.current;
+      if (!root || !layer || !plate || !photo || !top || !topLayer || !topPlate || !title || !kicker || !name || !hint) return;
       const W = window.innerWidth, H = window.innerHeight;
       const s = readTour(H);
 
-      // each section's clip: hidden until its door opens, a growing circle while it opens, clear after
-      entries.forEach((e, i) => {
-        const room = ROOMS[e.room];
-        const top = e.el.getBoundingClientRect().top;
-        const open = clamp01((-top - WALK_VH * H) / (OPEN_VH * H));
-        const { sx: cx, sy: cy } = photoOnScreen(room, W, H);
-        const secTop = e.section.getBoundingClientRect().top;
-        if (open >= 0.999) {
-          if (e.section.style.clipPath) e.section.style.clipPath = '';
-        } else {
-          const far = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy));
-          const r = open <= 0 ? 0 : 6 + out3(open) * far;
-          e.section.style.clipPath = `circle(${r.toFixed(1)}px at ${cx.toFixed(1)}px ${(cy - secTop).toFixed(1)}px)`;
+      // each section: hidden until you're at its door, then seen through the doorway, then the whole screen
+      entries.forEach((e) => {
+        const room: Room = ROOMS[e.room];
+        const t = e.el.getBoundingClientRect().top;
+        const walk = clamp01(-t / (WALK_VH * H));
+        const open = clamp01((-t - WALK_VH * H) / (OPEN_VH * H));
+        const sec = e.section, inner = e.inner;
+        if (t > 0.5) {
+          sec.style.clipPath = 'inset(50%)';
+          return;
         }
-        // the room's name: arrives as you step into the room, leaves as the door starts to open
-        const inRoom = clamp01((H * 0.55 - top) / (H * 0.45));
-        const leaving = clamp01((-top / (WALK_VH * H) - 0.22) / 0.2);
-        const o = i === s.index ? inRoom * (1 - leaving) : 0;
-        e.title.style.opacity = o.toFixed(3);
-        e.title.style.transform = `translateY(${((1 - inRoom) * 24 - leaving * 28).toFixed(1)}px) scale(${(1 - leaving * 0.04).toFixed(3)})`;
+        const cam = camera(room, W, H, walk, open);
+        if (cam.through >= 1) {
+          if (sec.style.clipPath) { sec.style.clipPath = ''; inner.style.transform = ''; e.veil.style.opacity = '0'; }
+          return;
+        }
+        const secTop = sec.getBoundingClientRect().top;
+        const [x0, y0, x1, y1] = cam.door;
+        // a hair bigger than the doorway so no seam shows against the frame
+        sec.style.clipPath = `polygon(${(x0 - 1).toFixed(1)}px ${(y0 - 1 - secTop).toFixed(1)}px, ${(x1 + 1).toFixed(1)}px ${(y0 - 1 - secTop).toFixed(1)}px, ${(x1 + 1).toFixed(1)}px ${(y1 + 1 - secTop).toFixed(1)}px, ${(x0 - 1).toFixed(1)}px ${(y1 + 1 - secTop).toFixed(1)}px)`;
+        inner.style.transformOrigin = `${cam.cx.toFixed(1)}px ${(cam.cy - secTop).toFixed(1)}px`;
+        inner.style.transform = `scale(${cam.k.toFixed(4)})`;
+        // the far side of a doorway is a touch dimmer until you're through it
+        e.veil.style.opacity = ((1 - cam.through) * 0.16).toFixed(3);
       });
 
-      if (!s.room) { root.style.visibility = 'hidden'; return; }
-      root.style.visibility = 'visible';
+      if (!s.room) { root.style.visibility = top.style.visibility = title.style.visibility = 'hidden'; return; }
+      root.style.visibility = title.style.visibility = 'visible';
       const room: Room = ROOMS[s.room];
-      if (src !== room.image) {
-        src = room.image;
-        sharp.src = soft.src = src;
+      if (current !== s.room) {
+        current = s.room;
+        photo.src = room.closed;
         if (rig) rig.style.display = 'none';
-        rig = plate.querySelector<HTMLElement>(`[data-rig="${room.key}"]`);
+        rig = topPlate.querySelector<HTMLElement>(`[data-rig="${room.key}"]`);
         if (rig) rig.style.display = '';
+        // numbered stops are the sections; a room with its own kicker (the front door) isn't counted
+        const numbered = entries.filter((e) => !(ROOMS[e.room] as Room).kicker);
+        const n = numbered.findIndex((e) => e.room === s.room);
+        kicker.textContent = room.kicker ?? `${String(n + 1).padStart(2, '0')} / ${String(numbered.length).padStart(2, '0')}`;
+        name.textContent = room.title ?? room.caption;
+        hint.textContent = room.hint ?? 'Scroll to step inside';
       }
 
-      // the photo, cover-fitted (and panned on narrow screens so the door stays in view)
-      const p = photoOnScreen(room, W, H);
+      const cam = camera(room, W, H, s.walk, s.open);
+      const p = cam.p;
       const box = `${p.ox.toFixed(1)},${p.oy.toFixed(1)},${p.w.toFixed(1)},${p.h.toFixed(1)}`;
       if (box !== plateBox) {
         plateBox = box;
-        Object.assign(plate.style, { left: `${p.ox}px`, top: `${p.oy}px`, width: `${p.w}px`, height: `${p.h}px` });
+        const st = { left: `${p.ox}px`, top: `${p.oy}px`, width: `${p.w}px`, height: `${p.h}px` };
+        Object.assign(plate.style, st);
+        Object.assign(topPlate.style, st);
       }
-      const [cx, cy] = [p.sx, p.sy];
+      const origin = `${cam.cx.toFixed(1)}px ${(cam.cy - cam.bob).toFixed(1)}px`;
+      const transform = `translateY(${cam.bob.toFixed(2)}px) scale(${cam.S.toFixed(4)})`;
+      layer.style.transformOrigin = topLayer.style.transformOrigin = origin;
+      layer.style.transform = topLayer.style.transform = transform;
+      // once you're through the door, the room is behind you
+      root.style.visibility = cam.through >= 1 ? 'hidden' : 'visible';
 
       // the door: swings open on its hinges as you walk up to it
       const dp = clamp01((s.walk - DOOR_FROM) / (DOOR_TO - DOOR_FROM));
-      const swing = inOut(dp);
+      const deg = inOut(dp) * (room.swing === 'out' ? 84 : 80);
+      top.style.visibility = s.top <= 0 && cam.through < 1 ? 'visible' : 'hidden';
+      // the door and whatever stood in front of it pass out of view as you step through
+      top.style.opacity = (1 - clamp01((cam.through - 0.3) / 0.35)).toFixed(3);
       if (rig) {
-        const out = room.swing === 'out';
-        const maxDeg = out ? 96 : 86;
-        const deg = swing * maxDeg;
-        const stage = rig.querySelector<HTMLElement>('[data-stage]');
-        if (stage) stage.style.perspective = `${(p.w * 0.9).toFixed(0)}px`;
-        // the leaves hand over to the real open-door photo as they reach the wall
-        const leafFade = 1 - clamp01((dp - 0.82) / 0.18);
+        const stage = rig.firstElementChild as HTMLElement | null;
+        if (stage) stage.style.perspective = `${(p.w * 0.5).toFixed(0)}px`;
         rig.querySelectorAll<HTMLElement>('[data-leaf]').forEach((leaf) => {
-          const left = leaf.dataset.leaf === 'left';
-          // rotateY(+) sends a leaf's right side away from you
-          const sign = (left ? 1 : -1) * (out ? -1 : 1);
+          // rotateY(+) sends a leaf's right side away from you (checked: a left leaf at -40° projects taller)
+          const sign = (leaf.dataset.leaf === 'left' ? 1 : -1) * (room.swing === 'out' ? -1 : 1);
           leaf.style.transform = deg > 0.01 ? `rotateY(${(sign * deg).toFixed(2)}deg)` : '';
-          leaf.style.opacity = leafFade.toFixed(3);
           const turn = Math.sin((deg * Math.PI) / 180);
           const shade = leaf.firstElementChild as HTMLElement | null;
-          if (shade) shade.style.opacity = (turn * (out ? 0.45 : 0.85)).toFixed(3);
+          if (shade) shade.style.opacity = (turn * (room.swing === 'out' ? 0.4 : 0.8)).toFixed(3);
           const edge = shade?.nextElementSibling as HTMLElement | null;
           if (edge) edge.style.opacity = (Math.min(1, turn * 3) * 0.9).toFixed(3);
         });
-        // once the door is open, the shut photo (and the lifted-out furniture) fade into the open one
-        const settle = 1 - clamp01((dp - 0.88) / 0.12);
-        const wall = rig.querySelector<HTMLElement>('[data-wall]');
-        if (wall) wall.style.opacity = settle.toFixed(3);
-        rig.style.visibility = settle <= 0.001 ? 'hidden' : '';
       }
 
-      // walking to the door: the camera moves towards the doorway (zooming about it, so it
-      // stays put on screen), with a faint step bob. Up to the door: frame the doorway at
-      // about two-thirds of the screen width, then step through with motion blur.
-      const d = doorBox(room);
-      const doorPx = (d[2] - d[0]) * p.w;
-      const atDoor = Math.min(2.1, Math.max(1.06, (W * 0.62) / doorPx));
-      const approach = inOut(clamp01(s.walk / DOOR_TO));
-      const through = in2(clamp01((s.walk - DOOR_TO) / (1 - DOOR_TO)));
-      const secs = (now - t0) / 1000;
-      const breathe = Math.sin(secs * 0.2) * 0.008;
-      const scale = (1.03 + breathe + (atDoor - 1.03) * approach) * (1 + through * 0.7) * (1 + out3(s.open) * 1.1);
-      const bob = Math.sin(s.walk * Math.PI * 7) * 3 * (1 - s.open) * (s.walk > 0 ? 1 : 0);
-      layer.style.transformOrigin = `${cx.toFixed(1)}px ${cy.toFixed(1)}px`;
-      layer.style.transform = `translateY(${bob.toFixed(2)}px) scale(${scale.toFixed(4)})`;
-      soft.style.opacity = clamp01(through * 0.55 + s.open * 0.6).toFixed(3);
-
-      // light spilling out of the doorway as the section opens
-      if (s.open > 0 && s.open < 1) {
-        const far = Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy));
-        const r = 6 + out3(s.open) * far;
-        glow.style.visibility = 'visible';
-        glow.style.width = glow.style.height = `${(r * 2).toFixed(1)}px`;
-        glow.style.left = `${(cx - r).toFixed(1)}px`;
-        glow.style.top = `${(cy - r).toFixed(1)}px`;
-        glow.style.opacity = (1 - s.open).toFixed(3);
-      } else {
-        glow.style.visibility = 'hidden';
-      }
+      // the section's name: arrives as the room comes into view, leaves as the door starts to open
+      const arrive = clamp01((H * 0.6 - s.top) / (H * 0.5));
+      const leave = clamp01((s.walk - 0.06) / 0.16);
+      title.style.opacity = (arrive * (1 - leave)).toFixed(3);
+      title.style.transform = `translateY(${((1 - arrive) * 26 - leave * 34).toFixed(1)}px) scale(${(1 - leave * 0.05).toFixed(3)})`;
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
@@ -424,141 +494,91 @@ export function TourBackdrop() {
       <div ref={rootRef} aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden bg-[#0d1513]" style={{ visibility: 'hidden' }}>
         <div ref={layerRef} className="absolute inset-0 will-change-transform">
           <div ref={plateRef} className="absolute">
-            <img ref={sharpRef} alt="" className="absolute inset-0 h-full w-full" />
-            {(Object.values(ROOMS) as Room[]).map((r) => <DoorRig key={r.key} room={r} />)}
-            <img ref={softRef} alt="" className="absolute inset-0 h-full w-full scale-[1.03] opacity-0 blur-[12px]" />
+            <img ref={photoRef} alt="" className="absolute inset-0 h-full w-full" />
           </div>
         </div>
-        {/* a soft lens vignette keeps the room names legible over any photo */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(0,22,19,0.45))]" />
+        {/* a soft lens vignette */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,rgba(0,22,19,0.4))]" />
       </div>
-      {/* the rim of the opening door: light around the growing circle, above the section it reveals */}
-      <div
-        ref={glowRef}
-        aria-hidden
-        className="pointer-events-none fixed z-[30] rounded-full shadow-[0_0_0_2px_rgba(255,255,255,0.9),0_0_60px_18px_rgba(255,248,235,0.75),0_0_160px_60px_rgba(255,240,215,0.35)]"
-        style={{ visibility: 'hidden' }}
-      />
+      <div ref={topRef} aria-hidden className="pointer-events-none fixed inset-0 z-[20] overflow-hidden" style={{ visibility: 'hidden' }}>
+        <div ref={topLayerRef} className="absolute inset-0 will-change-transform">
+          <div ref={topPlateRef} className="absolute">
+            {(Object.values(ROOMS) as Room[]).map((r) => <DoorRig key={r.key} room={r} />)}
+          </div>
+        </div>
+      </div>
+      {/* the section's name, over the door */}
+      <div ref={titleRef} aria-hidden className="pointer-events-none fixed inset-x-0 top-[30svh] z-[25] flex justify-center px-6 opacity-0" style={{ visibility: 'hidden' }}>
+        <div className="text-center text-white [text-shadow:0_4px_30px_rgba(0,0,0,0.6)]">
+          <p ref={kickerRef} className="font-label text-[11px] font-bold uppercase tracking-[0.3em] text-[#8FE3D4]" />
+          <h2 ref={nameRef} className="mt-3 font-display text-[clamp(2.8rem,7vw,6rem)] font-medium leading-[0.95]" />
+          <p className="mt-5 inline-flex items-center gap-2 rounded-full border border-white/25 bg-black/25 px-4 py-1.5 text-[13px] font-medium backdrop-blur-md">
+            <span ref={hintRef}>Scroll to step inside</span>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M6 2v8m0 0L2.5 6.5M6 10l3.5-3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </p>
+        </div>
+      </div>
     </>
   );
 }
 
-/* ---------------- one room + the section behind its door ---------------- */
+/* ---------------- one section, behind its own door ---------------- */
 
 export function RoomEntry({
   room,
-  number,
   children,
   id,
   className,
+  tone = 'bg-background',
 }: {
   room: RoomKey;
-  number: number;
+  /** Kept for call sites; rooms are numbered in page order. */
+  number?: number;
   children: ReactNode;
   /** DOM id for the section (kept for existing nav / footer anchors). */
   id?: string;
-  /** Background for the section behind the door (defaults to the page background). */
+  /** Classes for the section itself (background, padding). */
   className?: string;
+  /** Background behind the section while it's still small in the doorway (defaults to the page background). */
+  tone?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const sectionRef = useRef<HTMLDivElement>(null);
-  const titleRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const veilRef = useRef<HTMLDivElement>(null);
   const r = ROOMS[room];
 
   useLayoutEffect(() => {
-    const el = ref.current, section = sectionRef.current, title = titleRef.current;
-    if (!el || !section || !title) return;
-    const entry: Entry = { el, section, title, room };
+    const el = ref.current, section = sectionRef.current, inner = innerRef.current, veil = veilRef.current;
+    if (!el || !section || !inner || !veil) return;
+    const entry: Entry = { el, section, inner, veil, room };
     entries.push(entry);
     entries.sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
-    notify();
-    return () => { entries = entries.filter((e) => e !== entry); notify(); };
+    return () => { entries = entries.filter((e) => e !== entry); };
   }, [room]);
 
-  return (
-    <div ref={ref} data-room={room} id={`room-${room}`} className="relative">
-      {/* the walk across the room to its door; the room's name rides at mid-screen */}
-      <div className="relative" style={{ height: `${WALK_VH * 100}svh` }} aria-label={`${r.name}: ${r.caption}`}>
-        <div className="sticky top-[34svh] flex justify-center px-6">
-          <div ref={titleRef} className="text-center text-white opacity-0 [text-shadow:0_4px_30px_rgba(0,0,0,0.55)]">
-            <p className="font-label text-[11px] font-bold uppercase tracking-[0.22em] text-[#8FE3D4]">
-              Room {String(number).padStart(2, '0')}
-            </p>
-            <h2 className="mt-3 font-display text-[clamp(2.6rem,6vw,5.4rem)] font-medium leading-none">{r.name}</h2>
-            <p className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/25 bg-black/25 px-4 py-1.5 text-[13px] font-medium backdrop-blur-md">
-              {r.caption}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* behind the door: the section holds still while the circle opens over it */}
-      <div
-        ref={sectionRef}
-        id={id}
-        className={cn('sticky top-0 z-[1] bg-background', className)}
-        style={{ clipPath: 'circle(0px at 50% 50%)' }}
-      >
-        {children}
-      </div>
-      <div aria-hidden style={{ height: `${OPEN_VH * 100}svh` }} />
-    </div>
-  );
-}
-
-/* ---------------- the house map ---------------- */
-
-/** A mini floor-plan index on the right: which room you're in, and a way to walk straight to another. */
-export function RoomMap({ onJump }: { onJump: (y: number) => void }) {
-  const [list, setList] = useState<Entry[]>([]);
-  const [current, setCurrent] = useState(-1);
-  const curRef = useRef(-1);
-
+  // a link to this section (#faq…) lands you inside it, not at its closed door
   useEffect(() => {
-    const sync = () => setList([...entries]);
-    listeners.add(sync);
-    sync();
-    let raf = 0;
-    const tick = () => {
-      raf = requestAnimationFrame(tick);
-      const i = readTour(window.innerHeight).index;
-      if (i !== curRef.current) { curRef.current = i; setCurrent(i); }
+    if (!id) return;
+    const go = () => {
+      if (window.location.hash !== `#${id}` || !ref.current) return;
+      smoothScrollTo(ref.current.getBoundingClientRect().top + window.scrollY + (WALK_VH + OPEN_VH) * window.innerHeight);
     };
-    raf = requestAnimationFrame(tick);
-    return () => { listeners.delete(sync); cancelAnimationFrame(raf); };
-  }, []);
+    const t = window.setTimeout(go, 300);
+    window.addEventListener('hashchange', go);
+    return () => { window.clearTimeout(t); window.removeEventListener('hashchange', go); };
+  }, [id]);
 
   return (
-    <div className="pointer-events-none fixed inset-y-0 right-4 z-40 hidden items-center md:flex">
-      <AnimatePresence>
-        {current >= 0 && (
-          <motion.nav
-            aria-label="Rooms"
-            initial={{ opacity: 0, x: 14 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 14 }}
-            className="pointer-events-auto rounded-2xl border border-white/15 bg-[rgba(0,30,26,0.55)] p-2.5 backdrop-blur-xl"
-          >
-            <p className="mb-1.5 px-1.5 font-label text-[9.5px] font-bold uppercase tracking-[0.2em] text-white/50">The house</p>
-            <ul className="grid gap-0.5">
-              {list.map((e, i) => (
-                <li key={e.room}>
-                  <button
-                    type="button"
-                    onClick={() => onJump(e.el.getBoundingClientRect().top + window.scrollY + 2)}
-                    className={cn('group flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors', i === current ? 'bg-white/12' : 'hover:bg-white/8')}
-                  >
-                    <span className={cn('h-1.5 w-1.5 rounded-full transition-all', i === current ? 'scale-150 bg-[#8FE3D4]' : 'bg-white/40')} />
-                    <span className={cn('whitespace-nowrap font-label text-[11px] font-bold', i === current ? 'text-white' : 'text-white/55 group-hover:text-white/85')}>
-                      {ROOMS[e.room].name.replace('The ', '')}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </motion.nav>
-        )}
-      </AnimatePresence>
+    <div ref={ref} data-room={room} id={`room-${room}`} className="relative" aria-label={r.caption}>
+      {/* the section holds still (sticky) while you walk up to its door and through it */}
+      <div ref={sectionRef} id={id} className={cn('sticky top-0 z-[1]', tone)} style={{ clipPath: 'inset(50%)' }}>
+        <div ref={innerRef} className={cn('relative flex min-h-[100svh] flex-col justify-center will-change-transform', className)}>
+          {children}
+        </div>
+        <div ref={veilRef} aria-hidden className="pointer-events-none absolute inset-0 bg-[#0b1412] opacity-0" />
+      </div>
+      <div aria-hidden style={{ height: `${(WALK_VH + OPEN_VH) * 100}svh` }} />
     </div>
   );
 }
